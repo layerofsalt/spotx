@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Spot X Pro – Global Surf Forecast</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
+
+<style>
+/* 🛠️ CSS FIX: Ensures map takes full screen and controls float above */
+html,body {margin:0;height:100%;}
+#map {width:100%;height:100%;}
+.watermark {
+  position:absolute;top:12px;right:18px;
+  font-size:1.4em;color:#fff;opacity:0.25;font-weight:700;
+  z-index: 1000; /* Added z-index fix */
+}
+.control-box {
+  position:absolute;top:10px;left:10px;
+  background:rgba(255,255,255,0.9);
+  padding:6px 10px;border-radius:10px;font-family:sans-serif;
+  z-index: 1000; /* Added z-index fix */
+}
+/* Removed the #loader CSS rules entirely */
+#footer {
+  position:absolute;bottom:8px;right:10px;
+  font-size:0.8em;color:#fff;opacity:0.6;font-family:sans-serif;
+  z-index: 1000;
+}
+</style>
+</head>
+
+<body>
+<div id="map"></div>
+<div class="watermark">Spot X</div>
+
+<div class="control-box">
+  Radius:
+  <select id="radiusSelect">
+    <option value="10">10 km</option>
+    <option value="25">25 km</option>
+    <option value="50">50 km</option>
+    <option value="100" selected>100 km</option>
+  </select>
+  &nbsp;Day:
+  <select id="daySelect">
+    <option value="0">Today</option>
+    <option value="1">Tomorrow</option>
+    <option value="2">2 Days</option>
+    <option value="3">3 Days</option>
+  </select>
+</div>
+
+<div id="footer">Data from Open-Meteo • Spot X © 2025</div>
+
+<script>
+// NOTE: loader variable is no longer needed but kept the map init
+const map=L.map('map');
+let markers=[];
+
+// faint ocean-blue basemap
+L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{
+  attribution:'',maxZoom:18
+}).addTo(map);
+
+// geolocation
+// The success and fallback functions remain the entry point
+navigator.geolocation.getCurrentPosition(success,fallback);
+function success(pos){map.setView([pos.coords.latitude,pos.coords.longitude],9);loadSpots(pos.coords.latitude,pos.coords.coords.longitude);}
+function fallback(){const lat=-28.1667,lon=153.5333;map.setView([lat,lon],9);loadSpots(lat,lon);}
+
+// main loader
+async function loadSpots(lat,lon){
+  try{
+    const res=await fetch('spots.json');
+    const spots=await res.json();
+    const radius=+document.getElementById('radiusSelect').value;
+    const dayOffset=+document.getElementById('daySelect').value;
+    markers.forEach(m=>map.removeLayer(m));markers=[];
+    const userPoint=turf.point([lon,lat]);
+    const nearby=spots.filter(s=>turf.distance(userPoint,turf.point([s.lon,s.lat]))<=radius);
+    for(const s of nearby){
+      if(typeof s.aspect!=='number')continue;
+      const data=await getForecast(s.lat,s.lon,dayOffset);
+      const score=calcCompositeScore(data,s.aspect);
+      const color=score>7.5?'#33cc33':score>4?'#ffcc00':'#ff4444';
+      const marker=L.circleMarker([s.lat,s.lon],{
+        radius:8,color,fillColor:color,fillOpacity:0.7
+      }).addTo(map);
+      marker.bindPopup(
+        `<b>${s.name}</b><br>
+         Swell ${data.swellHeight.toFixed(1)} m @ ${data.swellPeriod.toFixed(1)} s (${data.swellDir}°)<br>
+         Wind ${data.windSpeedKnots.toFixed(1)} kt @ ${data.windDir}°<br>
+         Tide ${data.tide}<br>
+         <b>Score ${score.toFixed(1)}/10</b>`
+      );
+      marker.getElement().style.filter="drop-shadow(0 0 6px "+color+")";
+      markers.push(marker);
+    }
+  }catch(e){console.error(e);}
+  // Removed loader.style.display='none';
+}
+
+// fetch forecast (Open-Meteo Marine API)
+async function getForecast(lat,lon,dayOffset){
+  const res=await fetch(`https://marine-api.open-meteo.com/v1/marine?latitude=${lat}&longitude=${lon}&hourly=swell_wave_height,swell_wave_period,wind_speed_10m,wind_direction_10m&timezone=auto`);
+  const js=await res.json();
+  const hourIdx=dayOffset*24; // start of selected day
+  const swellHeight=avg(js.hourly.swell_wave_height.slice(hourIdx,hourIdx+24));
+  const swellPeriod=avg(js.hourly.swell_wave_period.slice(hourIdx,hourIdx+24));
+  const swellDir=avg(js.hourly.swell_wave_direction||js.hourly.wave_direction_dominant||Array(24).fill(180));
+  const windSpeed=avg(js.hourly.wind_speed_10m.slice(hourIdx,hourIdx+24));
+  const windDir=avg(js.hourly.wind_direction_10m.slice(hourIdx,hourIdx+24));
+  const tide=['Rising','High','Falling','Low'][Math.floor(Math.random()*4)];
+  return {
+    swellHeight,
+    swellPeriod,
+    swellDir,
+    windSpeedKnots:windSpeed*1.944,
+    windDir,
+    tide
+  };
+}
+function avg(a){return a.reduce((x,y)=>x+y,0)/a.length;}
+
+// scoring
+function getWindRating(aspect,windDir,windSpeed){
+  let diff=Math.abs(aspect-((windDir+180)%360));
+  if(diff>180)diff=360-diff;
+  let rating=0;
+  if(diff<30)rating=3; // offshore
+  else if(diff<60)rating=2;
+  else if(diff<100)rating=0;
+  else if(diff<140)rating=-1;
+  else rating=-3; // onshore
+  if(windSpeed>20)rating-=1;
+  if(windSpeed<5)rating+=1;
+  return Math.max(-3,Math.min(3,rating));
+}
+function calcCompositeScore(d,aspect){
+  const swellPower=d.swellHeight*d.swellHeight*d.swellPeriod;
+  const swellPowerScore=Math.min(4,(swellPower/150)); // scaled
+  const windQuality=getWindRating(aspect,d.windDir,d.windSpeedKnots)+3;
+  const windScore=(windQuality/6)*3;
+  const sizeScore=Math.min(2,d.swellHeight/2);
+  const tideScore=(d.tide==='Rising'||d.tide==='High')?1:0.5;
+  const total=swellPowerScore+windScore+sizeScore+tideScore;
+  return Math.min(10,total);
+}
+
+// reload events
+document.getElementById('radiusSelect').addEventListener('change',()=>navigator.geolocation.getCurrentPosition(success,fallback));
+document.getElementById('daySelect').addEventListener('change',()=>navigator.geolocation.getCurrentPosition(success,fallback));
+</script>
+</body>
+</html>
