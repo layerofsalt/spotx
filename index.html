@@ -79,7 +79,7 @@ async function loadSpots(lat,lon){
     const dayOffset=+document.getElementById('daySelect').value;
     markers.forEach(m=>map.removeLayer(m));markers=[];
     const userPoint=turf.point([lon,lat]);
-   const nearby=spots
+const nearby=spots
       .filter(s=>turf.distance(userPoint,turf.point([s.lon,s.lat]))<=radius)
       .slice(0, 10); // Limit to 10 nearest spots for stable API calls
     for(const s of nearby){
