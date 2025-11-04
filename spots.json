@@ -1,0 +1,284 @@
+[
+  {
+    "name": "Snapper Rocks",
+    "lat": -28.1644,
+    "lon": 153.5462,
+    "aspect": 70
+  },
+  {
+    "name": "Burleigh Heads",
+    "lat": -28.0902,
+    "lon": 153.4482,
+    "aspect": 40
+  },
+  {
+    "name": "Bells Beach",
+    "lat": -38.372,
+    "lon": 144.283,
+    "aspect": 190
+  },
+  {
+    "name": "Margaret River Mainbreak",
+    "lat": -33.972,
+    "lon": 114.989,
+    "aspect": 225
+  },
+  {
+    "name": "Kirra",
+    "lat": -28.168,
+    "lon": 153.539,
+    "aspect": 60
+  },
+  {
+    "name": "Uluwatu",
+    "lat": -8.829,
+    "lon": 115.084,
+    "aspect": 220
+  },
+  {
+    "name": "Padang Padang",
+    "lat": -8.814,
+    "lon": 115.082,
+    "aspect": 230
+  },
+  {
+    "name": "Canggu",
+    "lat": -8.647,
+    "lon": 115.118,
+    "aspect": 210
+  },
+  {
+    "name": "Cloudbreak",
+    "lat": -18.234,
+    "lon": 177.199,
+    "aspect": 230
+  },
+  {
+    "name": "Teahupoo",
+    "lat": -17.833,
+    "lon": -149.267,
+    "aspect": 200
+  },
+  {
+    "name": "Pipeline",
+    "lat": 21.664,
+    "lon": -158.051,
+    "aspect": 320
+  },
+  {
+    "name": "J-Bay",
+    "lat": -34.051,
+    "lon": 24.919,
+    "aspect": 90
+  },
+  {
+    "name": "Jeffreys Bay Point",
+    "lat": -34.05,
+    "lon": 24.92,
+    "aspect": 85
+  },
+  {
+    "name": "Hossegor",
+    "lat": 43.664,
+    "lon": -1.441,
+    "aspect": 270
+  },
+  {
+    "name": "Biarritz Grande Plage",
+    "lat": 43.483,
+    "lon": -1.558,
+    "aspect": 270
+  },
+  {
+    "name": "Mundaka",
+    "lat": 43.407,
+    "lon": -2.693,
+    "aspect": 70
+  },
+  {
+    "name": "Nazare",
+    "lat": 39.602,
+    "lon": -9.078,
+    "aspect": 300
+  },
+  {
+    "name": "Supertubos",
+    "lat": 39.355,
+    "lon": -9.381,
+    "aspect": 285
+  },
+  {
+    "name": "Raglan",
+    "lat": -37.827,
+    "lon": 174.818,
+    "aspect": 220
+  },
+  {
+    "name": "Trestles",
+    "lat": 33.385,
+    "lon": -117.594,
+    "aspect": 220
+  },
+  {
+    "name": "Malibu",
+    "lat": 34.033,
+    "lon": -118.678,
+    "aspect": 230
+  },
+  {
+    "name": "Santa Cruz Steamer Lane",
+    "lat": 36.951,
+    "lon": -122.025,
+    "aspect": 250
+  },
+  {
+    "name": "Mavericks",
+    "lat": 37.493,
+    "lon": -122.496,
+    "aspect": 280
+  },
+  {
+    "name": "Huntington Beach Pier",
+    "lat": 33.654,
+    "lon": -118.002,
+    "aspect": 220
+  },
+  {
+    "name": "Jaws (Peahi)",
+    "lat": 20.941,
+    "lon": -156.303,
+    "aspect": 320
+  },
+  {
+    "name": "Puerto Escondido",
+    "lat": 15.86,
+    "lon": -97.07,
+    "aspect": 225
+  },
+  {
+    "name": "Punta Roca",
+    "lat": 13.342,
+    "lon": -89.324,
+    "aspect": 240
+  },
+  {
+    "name": "Playa Hermosa (CR)",
+    "lat": 9.622,
+    "lon": -84.624,
+    "aspect": 210
+  },
+  {
+    "name": "Pavones",
+    "lat": 8.423,
+    "lon": -83.129,
+    "aspect": 220
+  },
+  {
+    "name": "Chicama",
+    "lat": -7.713,
+    "lon": -79.444,
+    "aspect": 330
+  },
+  {
+    "name": "Lobitos",
+    "lat": -4.449,
+    "lon": -81.283,
+    "aspect": 320
+  },
+  {
+    "name": "Pichilemu",
+    "lat": -34.386,
+    "lon": -72.027,
+    "aspect": 240
+  },
+  {
+    "name": "Skeleton Bay",
+    "lat": -22.963,
+    "lon": 14.482,
+    "aspect": 80
+  },
+  {
+    "name": "Taghazout (Anchor Point)",
+    "lat": 30.545,
+    "lon": -9.718,
+    "aspect": 320
+  },
+  {
+    "name": "Ericeira",
+    "lat": 38.962,
+    "lon": -9.415,
+    "aspect": 300
+  },
+  {
+    "name": "Fistral Beach",
+    "lat": 50.416,
+    "lon": -5.095,
+    "aspect": 280
+  },
+  {
+    "name": "Pembroke Dock",
+    "lat": 51.694,
+    "lon": -4.936,
+    "aspect": 250
+  },
+  {
+    "name": "Bundoran",
+    "lat": 54.477,
+    "lon": -8.277,
+    "aspect": 270
+  },
+  {
+    "name": "Thurso East",
+    "lat": 58.602,
+    "lon": -3.517,
+    "aspect": 320
+  },
+  {
+    "name": "Reef Road (Florida)",
+    "lat": 26.714,
+    "lon": -80.033,
+    "aspect": 90
+  },
+  {
+    "name": "Rincon (Puerto Rico)",
+    "lat": 18.34,
+    "lon": -67.26,
+    "aspect": 310
+  },
+  {
+    "name": "Bocas del Toro",
+    "lat": 9.353,
+    "lon": -82.26,
+    "aspect": 15
+  },
+  {
+    "name": "Jeffrey\u2019s Bay Supertubes",
+    "lat": -34.052,
+    "lon": 24.921,
+    "aspect": 90
+  },
+  {
+    "name": "Margate Pier (KZN)",
+    "lat": -30.858,
+    "lon": 30.368,
+    "aspect": 70
+  },
+  {
+    "name": "Muizenberg",
+    "lat": -34.107,
+    "lon": 18.472,
+    "aspect": 150
+  },
+  {
+    "name": "Durban Bay",
+    "lat": -29.871,
+    "lon": 31.051,
+    "aspect": 80
+  },
+  {
+    "name": "Dungeons (Cape Town)",
+    "lat": -34.064,
+    "lon": 18.34,
+    "aspect": 250
+  }
+]
