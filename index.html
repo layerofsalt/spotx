@@ -44,7 +44,6 @@ async function loadSpots(lat,lon){
   markers.forEach(m=>map.removeLayer(m));markers=[];
   try{
    const res = await fetch('/spotx/spots.json')
-    const spots=await res.json();
     const user=turf.point([lon,lat]);
     let near=spots.filter(s=>turf.distance(user,turf.point([s.lon,s.lat]))<=200);
     if(near.length===0) near=spots;
