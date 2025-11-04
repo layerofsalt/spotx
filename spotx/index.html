@@ -10,21 +10,21 @@
 <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
 
 <style>
-/* 🛠️ CSS FIX: Ensures map takes full screen and controls float above */
+/* CSS FIX: Ensures map takes full screen and controls float above */
 html,body {margin:0;height:100%;}
 #map {width:100%;height:100%;}
 .watermark {
   position:absolute;top:12px;right:18px;
   font-size:1.4em;color:#fff;opacity:0.25;font-weight:700;
-  z-index: 1000; /* Added z-index fix */
+  z-index: 1000;
 }
 .control-box {
   position:absolute;top:10px;left:10px;
   background:rgba(255,255,255,0.9);
   padding:6px 10px;border-radius:10px;font-family:sans-serif;
-  z-index: 1000; /* Added z-index fix */
+  z-index: 1000;
 }
-/* Removed the #loader CSS rules entirely */
+/* Loader CSS rules removed as the element is gone */
 #footer {
   position:absolute;bottom:8px;right:10px;
   font-size:0.8em;color:#fff;opacity:0.6;font-family:sans-serif;
@@ -57,7 +57,6 @@ html,body {margin:0;height:100%;}
 <div id="footer">Data from Open-Meteo • Spot X © 2025</div>
 
 <script>
-// NOTE: loader variable is no longer needed but kept the map init
 const map=L.map('map');
 let markers=[];
 
@@ -67,9 +66,8 @@ L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{
 }).addTo(map);
 
 // geolocation
-// The success and fallback functions remain the entry point
 navigator.geolocation.getCurrentPosition(success,fallback);
-function success(pos){map.setView([pos.coords.latitude,pos.coords.longitude],9);loadSpots(pos.coords.latitude,pos.coords.coords.longitude);}
+function success(pos){map.setView([pos.coords.latitude,pos.coords.longitude],9);loadSpots(pos.coords.latitude,pos.coords.longitude);}
 function fallback(){const lat=-28.1667,lon=153.5333;map.setView([lat,lon],9);loadSpots(lat,lon);}
 
 // main loader
@@ -101,7 +99,7 @@ async function loadSpots(lat,lon){
       markers.push(marker);
     }
   }catch(e){console.error(e);}
-  // Removed loader.style.display='none';
+  // Note: loader.style.display='none' removed
 }
 
 // fetch forecast (Open-Meteo Marine API)
