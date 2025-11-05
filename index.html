@@ -54,12 +54,12 @@ async function loadSpots(lat,lon){
       const color=score>7.5?'#33cc33':score>4?'#ffcc00':'#ff4444';
       const mark=L.circleMarker([s.lat,s.lon],{radius:8,color,fillColor:color,fillOpacity:0.9,weight:1}).addTo(map);
       mark.bindPopup(
-        `<b>${s.name}</b><br>
-        Swell: ${f.swellHeight.toFixed(1)} m @ ${f.swellPeriod.toFixed(1)} s (${f.swellDir}°)<br>
-        Wind: ${f.windSpeedKnots.toFixed(1)} kt @ ${f.windDir}°<br>
-        Tide: ${f.tide}<br>
-        <b>Score ${score.toFixed(1)}/10</b>`
-      );
+  `<b>${s.name}</b><br>
+  Swell: ${f.swellHeight.toFixed(1)} m @ ${f.swellPeriod.toFixed(1)} s (${f.swellDir}°)<br>
+  Wind: ${f.windSpeedKnots.toFixed(1)} kt @ ${f.windDir}°<br> // ⬅️ THIS LINE WAS MISSING
+  Tide: ${f.tide}<br>
+  <b>Score ${score.toFixed(1)}/10</b>`
+);
       const el=mark.getElement();
       if(el){
         if(score>7.5)el.classList.add('spotx-strong');
