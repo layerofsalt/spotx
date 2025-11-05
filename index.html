@@ -45,8 +45,9 @@ async function loadSpots(lat,lon){
   try{
  const res = await fetch('/spotx/spots.json')
     const user=turf.point([lon,lat]);
-    let near=spots.filter(s=>turf.distance(user,turf.point([s.lon,s.lat]))<=200).slice(0, 10);
+    let near=spots.filter(s=>turf.distance(user,turf.point([s.lon,s.lat]))<=200);
     if(near.length===0) near=spots;
+    near=near.slice(0,10);
     for(const s of near){
       const f=await getForecast(s.lat,s.lon);
       const score=calcScore(f,s.aspect);
