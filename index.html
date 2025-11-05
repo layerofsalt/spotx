@@ -42,13 +42,13 @@ if(navigator.geolocation){
 // main function
 async function loadSpots(lat,lon){
   markers.forEach(m=>map.removeLayer(m));markers=[];
-  let spots; // ⬅️ Fix 1: Defines 'spots' so it's accessible everywhere (solves ReferenceError)
+  let spots;
   try{
-    const res=await fetch('/spotx/spots.json'); // ⬅️ Fix 2: Corrects the path to find all data
-    spots=await res.json(); // ⬅️ Fix 3: Restores the line that loads the spot data
+    const res=await fetch('/spotx/spots.json');
+    spots=await res.json();
     const user=turf.point([lon,lat]);
-    let near = spots; // ⬅️ Final Logic: Forces the map to show all global spots
-    near=near.slice(0,10); // ⬅️ Fix 4: The original API safety limit
+    let near = spots;
+    near=near.slice(0,10);
     for(const s of near){
       const f=await getForecast(s.lat,s.lon);
       const score=calcScore(f,s.aspect);
@@ -70,7 +70,6 @@ async function loadSpots(lat,lon){
       markers.push(mark);
     }
   }catch(e){console.error(e);}
-}
 }
 
 // forecast
