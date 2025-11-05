@@ -56,7 +56,7 @@ async function loadSpots(lat,lon){
       mark.bindPopup(
   `<b>${s.name}</b><br>
   Swell: ${f.swellHeight.toFixed(1)} m @ ${f.swellPeriod.toFixed(1)} s (${f.swellDir}°)<br>
-  Wind: ${f.windSpeedKnots.toFixed(1)} kt @ ${f.windDir}°<br> // ⬅️ THIS LINE WAS MISSING
+  Wind: ${f.windSpeedKnots.toFixed(1)} kt @ ${f.windDir}°<br>
   Tide: ${f.tide}<br>
   <b>Score ${score.toFixed(1)}/10</b>`
 );
