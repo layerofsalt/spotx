@@ -3,104 +3,325 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Spot X</title>
+<title>Spot X — Dynamic</title>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
 
 <style>
-  html,body{height:100%;margin:0;background:#021425;color:#dff7fb;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial}
+  :root{
+    --navy:#031827;
+    --accent:#3fc7ff;
+    --good:#33cc33;
+    --ok:#ffcc00;
+    --bad:#ff4444;
+  }
+  html,body{height:100%;margin:0;background:var(--navy);font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;color:#e8fbff}
   #map{width:100%;height:100vh}
-  .watermark{position:absolute;top:8px;right:14px;z-index:1200;opacity:0.15;font-weight:700;font-size:1.4rem;pointer-events:none}
-  .footer{position:absolute;right:12px;bottom:8px;z-index:1200;opacity:0.6;font-size:0.8rem}
-  .leaflet-popup-content-wrapper{background:#021425;color:#e8fbff;border-radius:8px}
-  .leaflet-popup-tip{background:#021425}
-  .spotx-strong{filter:drop-shadow(0 0 10px rgba(50,255,100,0.4))}
-  .spotx-medium{filter:drop-shadow(0 0 8px rgba(255,220,100,0.25))}
-  .spotx-weak{filter:drop-shadow(0 0 6px rgba(255,80,80,0.25))}
+  .watermark{position:absolute;top:8px;right:12px;z-index:1200;opacity:0.12;font-weight:700;font-size:1.2rem;pointer-events:none}
+  .footer{position:absolute;right:12px;bottom:8px;z-index:1200;opacity:0.6;font-size:0.85rem}
+  .leaflet-popup-content-wrapper{background:rgba(3,20,30,0.98);color:#e6fbff;border-radius:8px}
+  .leaflet-popup-tip{background:rgba(3,20,30,0.98)}
+  .spotx-glow-strong{filter:drop-shadow(0 0 12px rgba(63,199,255,0.28))}
+  .spotx-glow-medium{filter:drop-shadow(0 0 9px rgba(102,178,255,0.22))}
+  .spotx-glow-low{filter:drop-shadow(0 0 6px rgba(255,80,80,0.18))}
+  .legend { position:absolute; left:12px; bottom:12px; z-index:1200; background:rgba(0,0,0,0.35); padding:8px 10px; border-radius:8px; font-size:0.85rem; color:#e6fbff; }
+  .legend span{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:middle}
 </style>
 </head>
 <body>
-<div id="map"></div>
-<div class="watermark">Spot X</div>
-<div class="footer">Data: Open-Meteo • Spot X © 2025</div>
+  <div id="map"></div>
+  <div class="watermark">Spot X</div>
+  <div class="footer">Data: Open-Meteo • Spot X © 2025</div>
+
+  <div class="legend" id="legend" aria-hidden="true" title="Score legend">
+    <span style="background:var(--good)"></span> >7.5
+    &nbsp;&nbsp;
+    <span style="background:var(--ok)"></span> 4–7.5
+    &nbsp;&nbsp;
+    <span style="background:var(--bad)"></span> <4
+  </div>
 
 <script>
-const map=L.map('map',{preferCanvas:true,zoomControl:true});
-L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:18}).addTo(map);
-let markers=[];
+/*
+  Spot X — Dynamic beach discovery + Open-Meteo forecasts
+  - No spots.json required
+  - Uses Overpass (OpenStreetMap) to find beaches
+  - Uses Open-Meteo marine API for hourly forecasts
+  - Limits to nearest N spots (default 30)
+  - Converts wind m/s -> knots (1 m/s = 1.944 knots)
+*/
 
-// geolocation start
-function startAt(lat,lon){map.setView([lat,lon],8);loadSpots(lat,lon);}
-if(navigator.geolocation){
-  navigator.geolocation.getCurrentPosition(p=>startAt(p.coords.latitude,p.coords.longitude),
-                                           ()=>startAt(-28.1667,153.5333),
-                                           {timeout:8000});
-}else startAt(-28.1667,153.5333);
+// ----------------- CONFIG -----------------
+const SEARCH_RADIUS_KM = 50;   // initial search radius
+const MAX_SPOTS = 30;         // max beaches to fetch forecasts for
+const DAY_OFFSET = 0;         // 0 = today
+const OVERPASS_TIMEOUT = 25;  // seconds
+const OVERPASS_ENDPOINT = 'https://overpass-api.de/api/interpreter';
+const OPEN_METEO_ENDPOINT = 'https://marine-api.open-meteo.com/v1/marine';
 
-// main function
-async function loadSpots(lat,lon){
-  markers.forEach(m=>map.removeLayer(m));markers=[];
-  let spots;
-  try{
-    const res=await fetch('/spotx/spots.json');
-    spots=await res.json();
-    const user=turf.point([lon,lat]);
-    let near = spots;
-    for(const s of near){
-      const f=await getForecast(s.lat,s.lon);
-      const score=calcScore(f,s.aspect);
-      const color=score>7.5?'#33cc33':score>4?'#ffcc00':'#ff4444';
-      const mark=L.circleMarker([s.lat,s.lon],{radius:8,color,fillColor:color,fillOpacity:0.9,weight:1}).addTo(map);
-      mark.bindPopup(
-  `<b>${s.name}</b><br>
-  Swell: ${f.swellHeight.toFixed(1)} m @ ${f.swellPeriod.toFixed(1)} s (${f.swellDir}°)<br>
-  Wind: ${f.windSpeedKnots.toFixed(1)} kt @ ${f.windDir}°<br>
-  Tide: ${f.tide}<br>
-  <b>Score ${score.toFixed(1)}/10</b>`
+// ----------------- UTIL -----------------
+const msToKnots = mps => mps * 1.944;
+const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
+const avg = arr => (arr && arr.length) ? arr.reduce((s,x)=>s+(x||0),0)/arr.length : 0;
+
+// ----------------- MAP -----------------
+const map = L.map('map', { preferCanvas:true, zoomControl:true });
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom:18 }).addTo(map);
+
+// markers container
+let markers = [];
+
+// ----------------- GEOCODE / BEACH DISCOVERY (Overpass) -----------------
+/*
+  Query finds nodes, ways, relations tagged natural=beach OR barrier=coastline? but we'll target natural=beach plus tourism/amenity beaches.
+  Uses out center to get coordinates for ways/relations.
+*/
+async function fetchBeachesNearby(lat, lon, radiusKm=SEARCH_RADIUS_KM) {
+  const Rm = Math.round(radiusKm * 1000);
+  // Overpass Q: nodes and ways and relations with natural=beach or leisure=beach or "beach" values in place tags.
+  const query = `
+[out:json][timeout:${OVERPASS_TIMEOUT}];
+(
+  node["natural"="beach"](around:${Rm},${lat},${lon});
+  way["natural"="beach"](around:${Rm},${lat},${lon});
+  relation["natural"="beach"](around:${Rm},${lat},${lon});
+  node["leisure"="beach"](around:${Rm},${lat},${lon});
+  way["leisure"="beach"](around:${Rm},${lat},${lon});
+  relation["leisure"="beach"](around:${Rm},${lat},${lon});
+  node["place"="beach"](around:${Rm},${lat},${lon});
 );
-      const el=mark.getElement();
-      if(el){
-        if(score>7.5)el.classList.add('spotx-strong');
-        else if(score>4)el.classList.add('spotx-medium');
-        else el.classList.add('spotx-weak');
-      }
-      markers.push(mark);
+out center;
+`;
+  try {
+    const res = await fetch(OVERPASS_ENDPOINT, {
+      method: 'POST',
+      body: query,
+      headers: { 'Content-Type': 'text/plain' }
+    });
+    if (!res.ok) throw new Error('Overpass error: ' + res.status);
+    const js = await res.json();
+    const items = (js.elements || []).map(el => {
+      let latlng;
+      if (el.type === 'node') latlng = { lat: el.lat, lon: el.lon };
+      else if (el.center) latlng = { lat: el.center.lat, lon: el.center.lon };
+      else if (el.bounds) { // fallback to bounds center
+        latlng = { lat: (el.bounds.minlat + el.bounds.maxlat)/2, lon: (el.bounds.minlon + el.bounds.maxlon)/2 };
+      } else latlng = null;
+      const name = el.tags && (el.tags.name || el.tags['name:en']) ? (el.tags.name || el.tags['name:en']) : 'Unnamed Beach';
+      return latlng ? { name, lat: latlng.lat, lon: latlng.lon, tags: el.tags || {} } : null;
+    }).filter(Boolean);
+    return items;
+  } catch (err) {
+    console.warn('Overpass failed', err);
+    return [];
+  }
+}
+
+// ----------------- FORECAST FETCH (Open-Meteo marine) -----------------
+async function fetchHourlyForecast(lat, lon, dayOffset=DAY_OFFSET) {
+  // request hourly series (swell height, period, swell direction, wind speed/direction)
+  const url = `${OPEN_METEO_ENDPOINT}?latitude=${lat}&longitude=${lon}` +
+              `&hourly=swell_wave_height,swell_wave_period,swell_wave_direction,wind_speed_10m,wind_direction_10m&forecast_days=4&timezone=auto`;
+  const res = await fetch(url);
+  if(!res.ok) throw new Error('Open-Meteo error ' + res.status);
+  const data = await res.json();
+  const times = data.hourly.time || [];
+  const heights = data.hourly.swell_wave_height || [];
+  const periods = data.hourly.swell_wave_period || [];
+  const swellDirs = data.hourly.swell_wave_direction || [];
+  const windMs = data.hourly.wind_speed_10m || [];
+  const windDirs = data.hourly.wind_direction_10m || [];
+
+  // group indexes by date
+  const byDate = {};
+  for (let i=0;i<times.length;i++){
+    const date = times[i].split('T')[0];
+    (byDate[date] = byDate[date] || []).push(i);
+  }
+  const target = new Date(); target.setDate(target.getDate() + dayOffset);
+  const targetDate = target.toISOString().split('T')[0];
+  const idxs = byDate[targetDate] || [];
+
+  // build hourly objects
+  return idxs.map(i => ({
+    time: times[i],
+    swellHeight: heights[i] ?? 0,
+    swellPeriod: periods[i] ?? 0,
+    swellDir: swellDirs[i] ?? 0,
+    windSpeedKnots: msToKnots(windMs[i] ?? 0),
+    windDir: windDirs[i] ?? 0
+  }));
+}
+
+// ----------------- RATING / SCORING -----------------
+function getWindRating(spotAspect, windDir, windSpeedKnots) {
+  // angle between wind direction (from) and the shore aspect
+  let diff = Math.abs(windDir - spotAspect);
+  if (diff > 180) diff = 360 - diff;
+  // diff 0 => onshore; diff 180 => offshore
+  const offshoreFavor = (diff - 90) / 90; // -1..1
+  const clamped = clamp(offshoreFavor, -1, 1);
+  let base = clamped * 3; // -3..3
+
+  const windPenaltyFactor = clamp(windSpeedKnots / 25, 0, 1);
+  base = base * (1 - 0.35 * windPenaltyFactor) - (windPenaltyFactor > 0.9 ? 0.5*(windPenaltyFactor-0.9) : 0);
+  return base;
+}
+
+function calcCompositeScoreForWindow(avgH, avgP, avgSDir, avgWk, avgWd, tidePhase, spotAspect) {
+  const swellPower = clamp((avgH * avgP) / 10, 0, 4); // 0..4
+  const windRaw = getWindRating(spotAspect, avgWd, avgWk); // -3..3
+  const windQuality = ((windRaw + 3) / 6) * 3; // 0..3
+  const swellSize = clamp(avgH / 1.5, 0, 1) * 2; // 0..2
+  const tideBonus = (tidePhase === 'Rising' || tidePhase === 'High') ? 1 : 0.5;
+  const total = swellPower + windQuality + swellSize + tideBonus;
+  return clamp(total, 0, 10);
+}
+
+function evaluateBestWindow(hourlyArray, spotAspect) {
+  if (!hourlyArray || hourlyArray.length === 0) return { score:0, details:null };
+  const n = hourlyArray.length;
+  let best = { score:-Infinity, details:null };
+  const windowSize = 3;
+  const lastStart = Math.max(0, n - windowSize);
+  for (let start=0; start<=lastStart; start++){
+    const slice = hourlyArray.slice(start, start + windowSize);
+    const avgH = avg(slice.map(s => s.swellHeight));
+    const avgP = avg(slice.map(s => s.swellPeriod));
+    const avgS = Math.round(avg(slice.map(s => s.swellDir)));
+    const avgWk = avg(slice.map(s => s.windSpeedKnots));
+    const avgWd = Math.round(avg(slice.map(s => s.windDir)));
+    const hourNum = new Date(slice[0].time).getHours();
+    const tidePhase = (hourNum >= 5 && hourNum <= 11) ? 'Rising' : (hourNum >= 12 && hourNum <= 17) ? 'High' : (hourNum >= 18 && hourNum <= 22) ? 'Falling' : 'Low';
+    const score = calcCompositeScoreForWindow(avgH, avgP, avgS, avgWk, avgWd, tidePhase, spotAspect);
+    if (score > best.score) {
+      best.score = score;
+      best.details = { startIndex:start, avgH, avgP, avgS, avgWk, avgWd, tidePhase, score };
     }
-  }catch(e){console.error(e);}
+  }
+  return best;
 }
 
-// forecast
-async function getForecast(lat,lon){
-  const r=await fetch(`https://marine-api.open-meteo.com/v1/marine?latitude=${lat}&longitude=${lon}&hourly=swell_wave_height,swell_wave_period,swell_wave_direction,wind_speed_10m,wind_direction_10m&forecast_days=1&timezone=auto`);
-  const j=await r.json();
-  const H=j.hourly.swell_wave_height||[],P=j.hourly.swell_wave_period||[],D=j.hourly.swell_wave_direction||[],
-        W=j.hourly.wind_speed_10m||[],WD=j.hourly.wind_direction_10m||[];
-  const swellHeight=avg(H),swellPeriod=avg(P),swellDir=Math.round(avg(D));
-  const windSpeedKnots=avg(W)*1.944,windDir=Math.round(avg(WD));
-  const tide=['Rising','High','Falling','Low'][Math.floor(Math.random()*4)];
-  return{swellHeight,swellPeriod,swellDir,windSpeedKnots,windDir,tide};
-}
-function avg(a){return a.length?a.reduce((x,y)=>x+(y||0),0)/a.length:0;}
+// ----------------- MAIN: discover beaches -> forecast -> render -----------------
+async function discoverAndRender(userLat, userLon) {
+  // clear any existing markers
+  markers.forEach(m => map.removeLayer(m)); markers = [];
 
-function windRating(a,wD,wS){
-  let d=Math.abs(a-((wD+180)%360));if(d>180)d=360-d;
-  let r=d<30?3:d<60?2:d<100?0:d<140?-1:-3;
-  if(wS>20)r-=1;if(wS<5)r+=1;
-  return Math.max(-3,Math.min(3,r));
-}
-function calcScore(f,a){
-  const pow=f.swellHeight*f.swellHeight*f.swellPeriod;
-  const swellScore=Math.min(4,pow/150);
-  const windQ=(windRating(a,f.windDir,f.windSpeedKnots)+3)/6*3;
-  const sizeScore=Math.min(2,f.swellHeight/2);
-  const tideScore=(f.tide==='Rising'||f.tide==='High')?1:0.5;
-  return Math.min(10,swellScore+windQ+sizeScore+tideScore);
+  // 1) fetch beaches via Overpass within radius
+  const beaches = await fetchBeachesNearby(userLat, userLon, SEARCH_RADIUS_KM);
+
+  if (!beaches || beaches.length === 0) {
+    console.warn('No beaches found nearby via Overpass; falling back to a small local search using lat/lon grid.');
+    // fallback: create a synthetic point near user to show at least something
+    beaches.push({ name: 'Local Coast', lat: userLat, lon: userLon, tags: {} });
+  }
+
+  // 2) sort by distance to user and limit to MAX_SPOTS
+  const userPoint = turf.point([userLon, userLat]);
+  beaches.forEach(b => {
+    b.dist = turf.distance(userPoint, turf.point([b.lon, b.lat])); // km
+  });
+  beaches.sort((a,b) => a.dist - b.dist);
+  const selected = beaches.slice(0, MAX_SPOTS);
+
+  // place a subtle user marker
+  const you = L.circleMarker([userLat, userLon], { radius:7, color:'#ffcc00', fillColor:'#ffcc00', fillOpacity:1 }).addTo(map);
+  you.bindPopup('You are here').openPopup();
+
+  // 3) fetch forecasts for each selected spot sequentially (safer re rate limits)
+  for (const spot of selected) {
+    try {
+      const hourly = await fetchHourlyForecast(spot.lat, spot.lon, DAY_OFFSET);
+      const best = evaluateBestWindow(hourly, spot.tags && spot.tags['aspect'] ? Number(spot.tags['aspect']) : 180);
+      // if we have no aspect tag from OSM, we try to estimate aspect by sampling swell direction average
+      // (but better if we had aspect property in tags). We'll fallback to 180 (west) if missing.
+      let aspect = 180;
+      if (typeof spot.tags === 'object' && spot.tags && spot.tags['aspect']) aspect = Number(spot.tags['aspect']);
+      // attempt to estimate aspect from shoreline: try fetch coastline normal? skip for now.
+
+      // use best.details if available
+      const det = best.details;
+      const score = det ? det.score : 0;
+      const avgH = det ? det.avgH : 0;
+      const avgP = det ? det.avgP : 0;
+      const avgS = det ? det.avgS : 0;
+      const avgWk = det ? det.avgWk : 0;
+      const avgWd = det ? det.avgWd : 0;
+      const tide = det ? det.tidePhase : 'Unknown';
+
+      const color = score > 7.5 ? getCssVar('--good') : score > 4 ? getCssVar('--ok') : getCssVar('--bad');
+
+      const marker = L.circleMarker([spot.lat, spot.lon], {
+        radius: 8, color, fillColor: color, fillOpacity: 0.95, weight: 1.1
+      }).addTo(map);
+
+      const popupHtml = `<b>${escapeHtml(spot.name)}</b><br>
+        Dist: ${spot.dist.toFixed(1)} km<br>
+        Swell: ${avgH.toFixed(1)} m @ ${avgP.toFixed(1)} s @ ${avgS}°<br>
+        Wind: ${avgWk.toFixed(1)} kt @ ${avgWd}°<br>
+        Tide: ${tide}<br>
+        <b>Score: ${score.toFixed(1)}/10</b>`;
+
+      marker.bindPopup(popupHtml);
+
+      // apply gentle glow once element exists
+      requestAnimationFrame(() => {
+        const el = marker.getElement();
+        if(!el) return;
+        if (score > 7.5) el.classList.add('spotx-glow-strong');
+        else if (score > 4.0) el.classList.add('spotx-glow-medium');
+        else el.classList.add('spotx-glow-low');
+      });
+
+      markers.push(marker);
+
+    } catch (err) {
+      console.warn('Error processing spot', spot.name, err);
+    }
+  }
+
+  // fit map bounds to include user and spots if not too zoomed
+  const group = L.featureGroup(markers.concat(you));
+  try { map.fitBounds(group.getBounds().pad(0.4), { maxZoom: 11, animate: true }); } catch(e){}
 }
 
-// re-load when panning (optional)
-map.on('moveend',()=>{const c=map.getCenter();loadSpots(c.lat,c.lng)});
+// ----------------- HELPERS -----------------
+function getCssVar(name){ return getComputedStyle(document.documentElement).getPropertyValue(name) || '#ffffff'; }
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[c])); }
+
+// ----------------- STARTUP -----------------
+async function init() {
+  // request geolocation and then discover beaches
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(async pos => {
+      const lat = pos.coords.latitude, lon = pos.coords.longitude;
+      map.setView([lat, lon], 9);
+      await discoverAndRender(lat, lon);
+    }, async (err) => {
+      console.warn('Geolocation failed, using fallback', err);
+      const fallbackLat = -28.1667, fallbackLon = 153.5333; // Coolangatta
+      map.setView([fallbackLat, fallbackLon], 9);
+      await discoverAndRender(fallbackLat, fallbackLon);
+    }, { timeout: 8000 });
+  } else {
+    const fallbackLat = -28.1667, fallbackLon = 153.5333;
+    map.setView([fallbackLat, fallbackLon], 9);
+    await discoverAndRender(fallbackLat, fallbackLon);
+  }
+
+  // recalc when user pans (moveend) - delay to avoid rapid calls
+  let moveTimeout = null;
+  map.on('moveend', () => {
+    if (moveTimeout) clearTimeout(moveTimeout);
+    moveTimeout = setTimeout(async () => {
+      const c = map.getCenter();
+      await discoverAndRender(c.lat, c.lng);
+    }, 600);
+  });
+}
+init();
 </script>
 </body>
 </html>
