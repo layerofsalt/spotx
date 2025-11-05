@@ -42,8 +42,10 @@ if(navigator.geolocation){
 // main function
 async function loadSpots(lat,lon){
   markers.forEach(m=>map.removeLayer(m));markers=[];
+  let spots;
   try{
  const res = await fetch('/spotx/spots.json')
+    spots=await res.json();
     const user=turf.point([lon,lat]);
     let near=spots.filter(s=>turf.distance(user,turf.point([s.lon,s.lat]))<=200);
     if(near.length===0) near=spots;
