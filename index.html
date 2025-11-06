@@ -105,6 +105,82 @@
         ()=>{document.getElementById('loading').innerText="⚠️ Location denied – showing Gold Coast";showNearby(-28.164,153.546);}
       );
     }else{showNearby(-28.164,153.546);}
-  </script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+  const map = L.map('map').setView([-28.164, 153.546], 9);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    maxZoom: 18,
+    attribution: 'Data from Open-Meteo • Spot X © 2025'
+  }).addTo(map);
+
+  const spots = [
+    { name: "Snapper Rocks", lat: -28.164, lon: 153.546 },
+    { name: "Burleigh Heads", lat: -28.09, lon: 153.448 },
+    { name: "Cabarita Beach", lat: -28.324, lon: 153.58 },
+    { name: "Lennox Head", lat: -28.796, lon: 153.593 },
+    { name: "Byron Bay", lat: -28.643, lon: 153.617 }
+  ];
+
+  async function getForecast(lat, lon) {
+    const url = `https://marine-api.open-meteo.com/v1/marine?latitude=${lat}&longitude=${lon}&hourly=wave_height,wind_wave_height,wind_speed,wind_direction&timezone=auto`;
+    const res = await fetch(url);
+    const json = await res.json();
+    return json.hourly;
+  }
+
+  async function showSpots() {
+    for (const spot of spots) {
+      try {
+        const data = await getForecast(spot.lat, spot.lon);
+        if (!data?.time) continue;
+        const id = `chart_${spot.name.replace(/\s/g, "_")}`;
+
+        const popup = `
+          <strong>${spot.name}</strong><br>
+          🌊 Swell: ${data.wave_height[0]?.toFixed(1) ?? "?"} m<br>
+          💨 Wind: ${data.wind_speed[0]?.toFixed(1) ?? "?"} km/h
+          <div><canvas id="${id}"></canvas></div>
+        `;
+
+        const marker = L.circleMarker([spot.lat, spot.lon], {
+          radius: 9,
+          color: '#ff6600',
+          fillColor: '#ffcc00',
+          fillOpacity: 0.9
+        }).addTo(map);
+
+        marker.bindPopup(popup);
+
+        marker.on('popupopen', () => {
+          const ctx = document.getElementById(id);
+          if (!ctx) return;
+
+          new Chart(ctx, {
+            type: 'line',
+            data: {
+              labels: data.time.slice(0, 48).map(t => t.slice(11, 16)),
+              datasets: [
+                { label: 'Swell (m)', data: data.wave_height.slice(0, 48), borderColor: '#4af', fill: false },
+                { label: 'Wind (km/h)', data: data.wind_speed.slice(0, 48), borderColor: '#fa4', fill: false }
+              ]
+            },
+            options: {
+              scales: { x: { ticks: { color: '#fff' } }, y: { ticks: { color: '#fff' } } },
+              plugins: { legend: { labels: { color: '#fff' } } },
+              elements: { point: { radius: 0 } },
+              maintainAspectRatio: false
+            }
+          });
+        });
+      } catch (err) {
+        console.error("Error loading", spot.name, err);
+      }
+    }
+  }
+
+  showSpots();
+</script>
+
 </body>
 </html>
