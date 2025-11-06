@@ -1,169 +1,110 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Spot X – Global Surf Forecast</title>
-
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
-
-<style>
-html, body {
-  margin: 0;
-  height: 100%;
-  background: #001f33;
-  font-family: system-ui, sans-serif;
-  color: white;
-}
-#map { height: 100%; width: 100%; }
-.watermark {
-  position: absolute;
-  top: 12px; right: 18px;
-  font-size: 1.5em;
-  color: #ffffffcc;
-  font-weight: 700;
-  text-shadow: 0 0 8px #00aaff;
-  z-index: 1000;
-}
-#footer {
-  position: absolute;
-  bottom: 10px; right: 12px;
-  font-size: 0.8em;
-  color: #ffffff88;
-  z-index: 1000;
-}
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Spot X</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    html,body{margin:0;height:100%;background:#06101f;color:#fff;font-family:'Inter',sans-serif;}
+    #map{height:100vh;width:100vw;}
+    h1{position:absolute;top:20px;left:50%;transform:translateX(-50%);
+       font-size:2.8rem;color:#9cf;text-shadow:0 0 25px #59f;z-index:1000;}
+    .leaflet-popup-content-wrapper{background:rgba(10,15,31,.95);color:#fff;border-radius:10px;}
+    .leaflet-popup-tip{background:rgba(10,15,31,.95);}
+    #loading{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+             font-size:1.2rem;color:#9cf;background:rgba(0,0,0,.5);
+             padding:1em 2em;border-radius:12px;z-index:999;text-align:center;}
+    canvas{width:260px!important;height:140px!important;}
+  </style>
 </head>
 <body>
-<div id="map"></div>
-<div class="watermark">Spot X</div>
-<div id="footer">Data from Open-Meteo • Spot X © 2025</div>
+  <h1>Spot X</h1>
+  <div id="loading">🌊 Finding your location and surf data…</div>
+  <div id="map"></div>
 
-<script>
-// Initialize map
-const map = L.map('map', {
-  zoomControl: false
-});
-L.control.zoom({ position: 'bottomright' }).addTo(map);
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const map=L.map('map').setView([0,0],2);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{
+      maxZoom:18,
+      attribution:'Data from Open-Meteo • Spot X © 2025'
+    }).addTo(map);
 
-// Dark navy basemap
-L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-  attribution: '',
-  maxZoom: 18
-}).addTo(map);
+    const spots=[
+      {name:"Snapper Rocks",lat:-28.164,lon:153.546},
+      {name:"Burleigh Heads",lat:-28.09,lon:153.448},
+      {name:"Bells Beach",lat:-38.372,lon:144.283},
+      {name:"Margaret River",lat:-33.972,lon:114.989},
+      {name:"Noosa Heads",lat:-26.384,lon:153.09},
+      {name:"Lennox Head",lat:-28.796,lon:153.593},
+      {name:"Byron Bay",lat:-28.643,lon:153.617},
+      {name:"Cabarita Beach",lat:-28.324,lon:153.58},
+      {name:"Currumbin Alley",lat:-28.132,lon:153.488}
+    ];
 
-// Geolocation
-navigator.geolocation.getCurrentPosition(success, fallback);
+    const hav=(a,b,c,d)=>{
+      const R=6371,toRad=x=>x*Math.PI/180,
+      dLat=toRad(c-a),dLon=toRad(d-b),
+      A=Math.sin(dLat/2)**2+Math.cos(toRad(a))*Math.cos(toRad(c))*Math.sin(dLon/2)**2;
+      return R*2*Math.atan2(Math.sqrt(A),Math.sqrt(1-A));
+    };
 
-function success(pos) {
-  const { latitude, longitude } = pos.coords;
-  map.setView([latitude, longitude], 10);
-  loadSpots(latitude, longitude);
-}
-
-function fallback() {
-  const lat = -28.1667, lon = 153.5333; // default: Snapper Rocks
-  map.setView([lat, lon], 10);
-  loadSpots(lat, lon);
-}
-
-// Generate random spots nearby
-function generateRandomSpots(lat, lon, count = 12, radius = 50) {
-  const spots = [];
-  for (let i = 0; i < count; i++) {
-    const angle = Math.random() * 2 * Math.PI;
-    const distance = Math.random() * radius;
-    const offset = turf.destination(turf.point([lon, lat]), distance, angle, { units: 'kilometers' }).geometry.coordinates;
-    spots.push({
-      name: `Spot ${i + 1}`,
-      lat: offset[1],
-      lon: offset[0],
-      aspect: Math.floor(Math.random() * 360)
-    });
-  }
-  return spots;
-}
-
-// Load and render spots
-async function loadSpots(lat, lon) {
-  const spots = generateRandomSpots(lat, lon);
-  for (const s of spots) {
-    try {
-      const data = await getForecast(s.lat, s.lon);
-      const score = calcCompositeScore(data, s.aspect);
-      const color = score > 7.5 ? '#00ff99' : score > 4 ? '#ffaa00' : '#ff4444';
-
-      const marker = L.circleMarker([s.lat, s.lon], {
-        radius: 7,
-        color,
-        fillColor: color,
-        fillOpacity: 0.7
-      }).addTo(map);
-
-      marker.bindPopup(`
-        <b>${s.name}</b><br>
-        Swell: ${data.swellHeight.toFixed(1)} m @ ${data.swellPeriod.toFixed(1)} s (${data.swellDir.toFixed(0)}°)<br>
-        Wind: ${data.windSpeedKnots.toFixed(1)} kt @ ${data.windDir.toFixed(0)}°<br>
-        <b>Score: ${score.toFixed(1)}/10</b>
-      `);
-
-      marker.getElement().style.filter = `drop-shadow(0 0 6px ${color})`;
-    } catch (err) {
-      console.error('Forecast error:', err);
+    async function getForecast(lat,lon){
+      const url=`https://marine-api.open-meteo.com/v1/marine?latitude=${lat}&longitude=${lon}&hourly=wave_height,wind_speed&timezone=auto`;
+      const r=await fetch(url);const j=await r.json();
+      return j.hourly;
     }
-  }
-}
 
-// Forecast data from Open-Meteo
-async function getForecast(lat, lon) {
-  const res = await fetch(`https://marine-api.open-meteo.com/v1/marine?latitude=${lat}&longitude=${lon}&hourly=swell_wave_height,swell_wave_period,swell_wave_direction,wind_speed_10m,wind_direction_10m&timezone=auto`);
-  const js = await res.json();
-  const h = js.hourly;
-  const swellHeight = avg(h.swell_wave_height.slice(0, 12));
-  const swellPeriod = avg(h.swell_wave_period.slice(0, 12));
-  const swellDir = avg(h.swell_wave_direction.slice(0, 12));
-  const windSpeed = avg(h.wind_speed_10m.slice(0, 12));
-  const windDir = avg(h.wind_direction_10m.slice(0, 12));
+    function chartHTML(id){return`<canvas id="${id}"></canvas>`;}
 
-  return {
-    swellHeight,
-    swellPeriod,
-    swellDir,
-    windSpeedKnots: windSpeed * 1.944,
-    windDir
-  };
-}
+    async function showNearby(lat,lon){
+      document.getElementById('loading').innerText="🌐 Loading nearby surf forecasts…";
+      const near=spots.filter(s=>hav(lat,lon,s.lat,s.lon)<50);
+      map.setView([lat,lon],9);
+      L.circleMarker([lat,lon],{radius:8,color:'#0ff',fillColor:'#9cf',fillOpacity:.8}).addTo(map).bindPopup("📍 You're here");
 
-function avg(arr) {
-  return arr.reduce((a, b) => a + b, 0) / arr.length;
-}
+      for(const s of near){
+        const d=await getForecast(s.lat,s.lon);
+        const id=`chart_${s.name.replace(/\s/g,'_')}`;
+        const popupHTML=`
+          <strong>${s.name}</strong><br>
+          🌊 Latest swell: ${d.wave_height[0].toFixed(1)} m<br>
+          💨 Wind: ${d.wind_speed[0].toFixed(1)} km/h
+          <div>${chartHTML(id)}</div>`;
+        const m=L.circleMarker([s.lat,s.lon],{radius:10,color:'#ff6600',fillColor:'#ffcc00',fillOpacity:.85}).addTo(map);
+        m.bindPopup(popupHTML);
 
-// Scoring logic
-function getWindRating(aspect, windDir, windSpeed) {
-  let diff = Math.abs(aspect - ((windDir + 180) % 360));
-  if (diff > 180) diff = 360 - diff;
-  let rating = 0;
-  if (diff < 30) rating = 3; // offshore
-  else if (diff < 60) rating = 2;
-  else if (diff < 100) rating = 0;
-  else if (diff < 140) rating = -1;
-  else rating = -3; // onshore
-  if (windSpeed > 20) rating -= 1;
-  if (windSpeed < 5) rating += 1;
-  return Math.max(-3, Math.min(3, rating));
-}
+        m.on('popupopen',()=>{
+          const ctx=document.getElementById(id);
+          if(!ctx)return;
+          new Chart(ctx,{type:'line',
+            data:{
+              labels:d.time.slice(0,72).map(t=>t.slice(11,16)),
+              datasets:[
+                {label:'Swell (m)',data:d.wave_height.slice(0,72),borderColor:'#4af',fill:false,yAxisID:'y1'},
+                {label:'Wind (km/h)',data:d.wind_speed.slice(0,72),borderColor:'#fa4',fill:false,yAxisID:'y2'}
+              ]},
+            options:{
+              responsive:true,
+              scales:{y1:{type:'linear',position:'left'},y2:{type:'linear',position:'right'}},
+              plugins:{legend:{display:true,labels:{color:'#fff'}}},
+              elements:{point:{radius:0}},
+              maintainAspectRatio:false
+            }
+          });
+        });
+      }
+      document.getElementById('loading').style.display='none';
+    }
 
-function calcCompositeScore(d, aspect) {
-  const swellPower = d.swellHeight * d.swellHeight * d.swellPeriod;
-  const swellPowerScore = Math.min(4, swellPower / 150);
-  const windQuality = getWindRating(aspect, d.windDir, d.windSpeedKnots) + 3;
-  const windScore = (windQuality / 6) * 3;
-  const sizeScore = Math.min(2, d.swellHeight / 2);
-  const total = swellPowerScore + windScore + sizeScore + 1;
-  return Math.min(10, total);
-}
-</script>
+    if(navigator.geolocation){
+      navigator.geolocation.getCurrentPosition(
+        p=>showNearby(p.coords.latitude,p.coords.longitude),
+        ()=>{document.getElementById('loading').innerText="⚠️ Location denied – showing Gold Coast";showNearby(-28.164,153.546);}
+      );
+    }else{showNearby(-28.164,153.546);}
+  </script>
 </body>
 </html>
