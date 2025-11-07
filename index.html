@@ -7,111 +7,130 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
-    html,body{margin:0;height:100%;background:#06101f;color:#fff;font-family:'Inter',sans-serif;}
-    #map{height:100vh;width:100vw;}
-    h1{position:absolute;top:20px;left:50%;transform:translateX(-50%);
-       font-size:2.5rem;color:#9cf;text-shadow:0 0 25px #59f;z-index:1000;}
-    .leaflet-popup-content-wrapper{background:rgba(10,15,31,.95);color:#fff;border-radius:10px;}
-    .leaflet-popup-tip{background:rgba(10,15,31,.95);}
-    #loading{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
-             font-size:1.2rem;color:#9cf;background:rgba(0,0,0,.5);
-             padding:1em 2em;border-radius:12px;z-index:999;text-align:center;}
-    canvas{width:260px!important;height:140px!important;}
+    html, body { margin:0; height:100%; background:#06101f; color:#fff; font-family:'Inter',sans-serif; overflow:hidden; }
+    #map { height:100vh; width:100vw; }
+    h1 { position:absolute; top:20px; left:50%; transform:translateX(-50%);
+         font-size:3rem; color:#9cf; text-shadow:0 0 25px #59f; z-index:1000; }
+    .leaflet-popup-content-wrapper { background:rgba(10,15,31,.95); color:#fff; border-radius:10px; }
+    .leaflet-popup-tip { background:rgba(10,15,31,.95); }
+    #loading { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+               font-size:1.2rem; color:#9cf; background:rgba(0,0,0,.6);
+               padding:1em 2em; border-radius:12px; z-index:999; text-align:center; }
+    canvas { width:260px!important; height:140px!important; }
   </style>
 </head>
+
 <body>
   <h1>Spot X</h1>
-  <div id="loading">🌊 Finding your location & surf data…</div>
+  <div id="loading">🌊 Loading surf + tide data...</div>
   <div id="map"></div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
-    const map = L.map('map').setView([-28.164,153.546], 7);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{
-      maxZoom:18,
-      attribution:'Data from Open-Meteo • Spot X © 2025'
+    const map = L.map('map').setView([-28.164, 153.546], 9);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      maxZoom: 18,
+      attribution: 'Data © Open-Meteo • Spot X © 2025'
     }).addTo(map);
 
-    // Simple haversine distance (km)
-    const hav = (a,b,c,d) => {
-      const R=6371,toRad=x=>x*Math.PI/180,
-      dLat=toRad(c-a),dLon=toRad(d-b),
-      A=Math.sin(dLat/2)**2+Math.cos(toRad(a))*Math.cos(toRad(c))*Math.sin(dLon/2)**2;
-      return R*2*Math.atan2(Math.sqrt(A),Math.sqrt(1-A));
-    };
+    const spots = [
+      { name: "Snapper Rocks", lat: -28.169, lon: 153.55 },
+      { name: "Duranbah", lat: -28.162, lon: 153.55 },
+      { name: "Kirra", lat: -28.168, lon: 153.539 },
+      { name: "Coolangatta", lat: -28.168, lon: 153.54 },
+      { name: "Burleigh Heads", lat: -28.083, lon: 153.46 },
+      { name: "Palm Beach", lat: -28.106, lon: 153.48 },
+      { name: "Fingal Head", lat: -28.18, lon: 153.56 },
+      { name: "Cabarita Beach", lat: -28.324, lon: 153.58 }
+    ];
 
-    // Create a grid of points around a center
-    function generateGrid(lat, lon, spacing = 0.25, radius = 50) {
-      const pts=[];
-      for(let latOff=-1;latOff<=1;latOff++){
-        for(let lonOff=-1;lonOff<=1;lonOff++){
-          const la=lat+latOff*spacing, lo=lon+lonOff*spacing;
-          if(hav(lat,lon,la,lo)<=radius) pts.push({lat:la,lon:lo});
-        }
+    // 🌀 Fetch marine forecast including tide
+    async function getForecast(lat, lon) {
+      const url = `https://marine-api.open-meteo.com/v1/marine?latitude=${lat}&longitude=${lon}&hourly=wave_height,wind_speed,tide_height&timezone=auto`;
+      try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(res.status);
+        const data = await res.json();
+        return data?.hourly ?? null;
+      } catch (err) {
+        console.warn("Forecast error", lat, lon, err);
+        return null;
       }
-      return pts;
     }
 
-    async function getForecast(lat,lon){
-      const url=`https://marine-api.open-meteo.com/v1/marine?latitude=${lat}&longitude=${lon}&hourly=wave_height,wind_speed&timezone=auto`;
-      const r=await fetch(url);
-      const j=await r.json();
-      return j.hourly;
-    }
+    const chartHTML = id => `<canvas id="${id}"></canvas>`;
 
-    function chartHTML(id){return`<canvas id="${id}"></canvas>`;}
+    // 📊 Load spots gradually
+    async function loadSpotsBatch(batch) {
+      for (const s of batch) {
+        const d = await getForecast(s.lat, s.lon);
+        if (!d) continue;
 
-    async function showForecasts(lat,lon){
-      document.getElementById('loading').innerText="🌐 Loading nearby marine forecasts…";
-      map.setView([lat,lon],9);
-      L.circleMarker([lat,lon],{radius:8,color:'#0ff',fillColor:'#9cf',fillOpacity:.9}).addTo(map).bindPopup("📍 You're here");
+        const id = `chart_${s.name.replace(/\s/g, "_")}`;
+        const popupHTML = `
+          <strong>${s.name}</strong><br>
+          🌊 Swell: ${d.wave_height[0].toFixed(1)} m<br>
+          💨 Wind: ${d.wind_speed[0].toFixed(1)} km/h<br>
+          🌅 Tide: ${d.tide_height[0].toFixed(2)} m
+          ${chartHTML(id)}
+        `;
 
-      const pts=generateGrid(lat,lon,0.25,50);
-      for(const [i,p] of pts.entries()){
-        try{
-          const d=await getForecast(p.lat,p.lon);
-          const id=`chart_${i}`;
-          const popup=`
-            <strong>Forecast Point</strong><br>
-            📍 ${p.lat.toFixed(2)}, ${p.lon.toFixed(2)}<br>
-            🌊 Swell: ${d.wave_height[0]?.toFixed(1)??"?"} m<br>
-            💨 Wind: ${d.wind_speed[0]?.toFixed(1)??"?"} km/h
-            <div>${chartHTML(id)}</div>`;
-          const m=L.circleMarker([p.lat,p.lon],{
-            radius:8,color:'#ff6600',fillColor:'#ffcc00',fillOpacity:.85
-          }).addTo(map).bindPopup(popup);
-          m.on('popupopen',()=>{
-            const ctx=document.getElementById(id);
-            if(!ctx)return;
-            new Chart(ctx,{
-              type:'line',
-              data:{
-                labels:d.time.slice(0,48).map(t=>t.slice(11,16)),
-                datasets:[
-                  {label:'Swell (m)',data:d.wave_height.slice(0,48),borderColor:'#4af',fill:false},
-                  {label:'Wind (km/h)',data:d.wind_speed.slice(0,48),borderColor:'#fa4',fill:false}
-                ]
-              },
-              options:{
-                scales:{x:{ticks:{color:'#fff'}},y:{ticks:{color:'#fff'}}},
-                plugins:{legend:{labels:{color:'#fff'}}},
-                elements:{point:{radius:0}},
-                maintainAspectRatio:false
-              }
-            });
+        const marker = L.circleMarker([s.lat, s.lon], {
+          radius: 8, color: '#ff6600', fillColor: '#ffcc00', fillOpacity: .9
+        }).addTo(map).bindPopup(popupHTML);
+
+        marker.on('popupopen', () => {
+          const ctx = document.getElementById(id);
+          if (!ctx) return;
+          new Chart(ctx, {
+            type: 'line',
+            data: {
+              labels: d.time.slice(0, 48).map(t => t.slice(11, 16)),
+              datasets: [
+                { label: 'Swell (m)', data: d.wave_height.slice(0, 48), borderColor: '#4af', fill: false },
+                { label: 'Wind (km/h)', data: d.wind_speed.slice(0, 48), borderColor: '#fa4', fill: false },
+                { label: 'Tide (m)', data: d.tide_height.slice(0, 48), borderColor: '#0f8', fill: false }
+              ]
+            },
+            options: {
+              plugins: { legend: { labels: { color: '#fff' } } },
+              scales: { x: { ticks: { color: '#fff' } }, y: { ticks: { color: '#fff' } } },
+              elements: { point: { radius: 0 } },
+              maintainAspectRatio: false
+            }
           });
-        }catch(e){console.error("Error loading point",p,e);}
+        });
+        await new Promise(r => setTimeout(r, 700)); // gentle pacing
       }
-      document.getElementById('loading').style.display='none';
     }
 
-    // Try user's location
-    if(navigator.geolocation){
+    async function showForecasts(lat, lon) {
+      document.getElementById('loading').style.display = "block";
+      map.setView([lat, lon], 10);
+
+      L.circleMarker([lat, lon], {
+        radius: 8, color: '#0ff', fillColor: '#9cf', fillOpacity: .9
+      }).addTo(map).bindPopup("📍 You are here").openPopup();
+
+      for (let i = 0; i < spots.length; i += 3)
+        await loadSpotsBatch(spots.slice(i, i + 3));
+
+      document.getElementById('loading').style.display = "none";
+    }
+
+    function autoRefresh(lat, lon) {
+      setInterval(() => showForecasts(lat, lon), 60 * 60 * 1000);
+    }
+
+    if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
-        p=>showForecasts(p.coords.latitude,p.coords.longitude),
-        ()=>{document.getElementById('loading').innerText="⚠️ Location denied – showing Gold Coast";showForecasts(-28.164,153.546);}
+        p => { showForecasts(p.coords.latitude, p.coords.longitude); autoRefresh(p.coords.latitude, p.coords.longitude); },
+        () => { showForecasts(-28.164, 153.546); autoRefresh(-28.164, 153.546); }
       );
-    } else { showForecasts(-28.164,153.546); }
+    } else {
+      showForecasts(-28.164, 153.546);
+      autoRefresh(-28.164, 153.546);
+    }
   </script>
 </body>
 </html>
