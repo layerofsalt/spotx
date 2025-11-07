@@ -1,227 +1,69 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Interactive Location Picker</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    
-    <!-- Leaflet Map CSS - INTEGRITY REMOVED -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-    
-    <!-- Lucide Icons -->
-    <script src="https://unpkg.com/lucide@latest"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+const map = L.map('map').setView([-28.164, 153.546], 9);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+  maxZoom: 18,
+  attribution: 'Data © Open-Meteo • Spot X © 2025'
+}).addTo(map);
 
-    <style>
-        /* Setup for centering and nice background */
-        body {
-            background-color: #f0f4f8;
-            font-family: 'Inter', sans-serif;
-            display: flex;
-            justify-content: center;
-            align-items: flex-start;
-            min-height: 100vh;
-        }
-        /* Card container */
-        .container {
-            max-width: 700px;
-            padding: 20px;
-            background: white;
-            border-radius: 12px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
-            margin: 20px;
-            width: 100%;
-        }
-        /* Map styling */
-        #mapContainer {
-            height: 400px;
-            width: 100%;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
-        }
-        .input-group label {
-            transition: color 0.2s;
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1 class="text-2xl font-extrabold text-gray-800 mb-2 border-b pb-2">🌏 Map Coordinate Selector</h1>
-        <p class="text-gray-600 mb-4 text-sm">
-            Drag the pin or click anywhere on the map to determine the **Latitude** and **Longitude**.
-        </p>
-        
-        <!-- Map Container -->
-        <div id="mapContainer"></div>
+const spots = [
+  { name: "Snapper Rocks", lat: -28.169, lon: 153.55 },
+  { name: "Burleigh Heads", lat: -28.083, lon: 153.46 },
+  { name: "Cabarita Beach", lat: -28.324, lon: 153.58 },
+  { name: "Lennox Head", lat: -28.796, lon: 153.593 },
+  { name: "Byron Bay", lat: -28.643, lon: 153.617 }
+];
 
-        <!-- Coordinates Output and Copy Action -->
-        <div class="p-4 bg-indigo-50 rounded-xl border border-indigo-100 flex flex-col md:flex-row items-center justify-between space-y-4 md:space-y-0 md:space-x-4">
-            
-            <!-- Lat/Lon Display Group -->
-            <div class="grid grid-cols-2 gap-4 w-full md:w-3/4">
-                <div class="input-group">
-                    <label for="latitude" class="block text-xs font-medium text-indigo-700">Latitude</label>
-                    <input type="text" id="latitude" value="34.0384" readonly class="mt-1 block w-full rounded-lg border-indigo-300 p-2 text-base bg-white shadow-inner focus:outline-none focus:ring-2 focus:ring-indigo-500 transition duration-150 ease-in-out">
-                </div>
-                <div class="input-group">
-                    <label for="longitude" class="block text-xs font-medium text-indigo-700">Longitude</label>
-                    <input type="text" id="longitude" value="-118.7770" readonly class="mt-1 block w-full rounded-lg border-indigo-300 p-2 text-base bg-white shadow-inner focus:outline-none focus:ring-2 focus:ring-indigo-500 transition duration-150 ease-in-out">
-                </div>
-            </div>
+// ✅ WORKING endpoint
+async function getForecast(lat, lon) {
+  const url = `https://marine-api.open-meteo.com/v1/marine?latitude=${lat}&longitude=${lon}&hourly=wave_height,wave_direction,wave_period,wind_speed,wind_direction&timezone=auto`;
+  const res = await fetch(url);
+  const data = await res.json();
+  if (!data?.hourly) throw new Error("Invalid data");
+  return data.hourly;
+}
 
-            <!-- Action Button -->
-            <button id="copyButton" class="w-full md:w-1/4 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-4 rounded-lg flex items-center justify-center space-x-2 transition duration-200 shadow-lg hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-opacity-50 min-w-[150px]">
-                <i data-lucide="clipboard-list" class="w-5 h-5"></i>
-                <span id="buttonText">Copy</span>
-            </button>
-        </div>
+async function showSpots() {
+  for (const s of spots) {
+    try {
+      const d = await getForecast(s.lat, s.lon);
+      const id = `chart_${s.name.replace(/\s/g, "_")}`;
+      const popup = `
+        <strong>${s.name}</strong><br>
+        🌊 Swell: ${d.wave_height[0]?.toFixed(1)} m<br>
+        💨 Wind: ${d.wind_speed[0]?.toFixed(1)} km/h
+        <div><canvas id="${id}"></canvas></div>
+      `;
+      const marker = L.circleMarker([s.lat, s.lon], {
+        radius: 8, color: '#ff6600', fillColor: '#ffcc00', fillOpacity: 0.9
+      }).addTo(map);
+      marker.bindPopup(popup);
 
-        <!-- Message Box for Feedback (instead of alert) -->
-        <div id="messageBox" class="mt-4 p-3 text-sm text-center bg-green-100 text-green-700 rounded-lg hidden" role="alert">
-            Coordinates copied!
-        </div>
-        
-    </div>
-
-    <!-- Leaflet Map JS - INTEGRITY REMOVED -->
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
-    <script>
-        
-        // Map Globals
-        let surfMap = null;
-        let mapMarker = null;
-        
-        // Default Location (Malibu, CA)
-        const DEFAULT_LAT = 34.0384;
-        const DEFAULT_LON = -118.7770;
-
-        /**
-         * Shows a temporary feedback message.
-         */
-        const showMessage = (text, type = 'success') => {
-            const messageBox = document.getElementById('messageBox');
-            messageBox.textContent = text;
-            
-            // Clear previous classes and set new ones based on type
-            messageBox.className = 'mt-4 p-3 text-sm text-center rounded-lg';
-            if (type === 'success') {
-                messageBox.classList.add('bg-green-100', 'text-green-700');
-            } else if (type === 'error') {
-                messageBox.classList.add('bg-red-100', 'text-red-700');
-            }
-
-            messageBox.classList.remove('hidden');
-            setTimeout(() => {
-                messageBox.classList.add('hidden');
-            }, 3000);
-        };
-
-        /**
-         * Updates the latitude and longitude input fields.
-         */
-        const updateInputs = (lat, lon) => {
-            document.getElementById('latitude').value = lat.toFixed(4);
-            document.getElementById('longitude').value = lon.toFixed(4);
-        };
-
-        /**
-         * Updates the map's view and marker position.
-         */
-        const updateMapMarker = (lat, lon) => {
-            if (surfMap && mapMarker) {
-                const newLatLng = L.latLng(lat, lon);
-                mapMarker.setLatLng(newLatLng);
-                // Center the map, maintaining current zoom
-                surfMap.setView(newLatLng, surfMap.getZoom()); 
-                mapMarker.setPopupContent(`Lat: ${lat.toFixed(4)}, Lon: ${lon.toFixed(4)}`).openPopup();
-            }
-        };
-
-        /**
-         * Initializes the Leaflet map and places the initial marker.
-         */
-        const initMap = () => {
-            const lat = DEFAULT_LAT;
-            const lon = DEFAULT_LON;
-
-            // 1. Initialize Map
-            surfMap = L.map('mapContainer').setView([lat, lon], 10);
-            
-            // 2. Add Tile Layer (OpenStreetMap)
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                maxZoom: 19,
-                attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-            }).addTo(surfMap);
-
-            // 3. Add Marker
-            mapMarker = L.marker([lat, lon], { draggable: true }).addTo(surfMap)
-                .bindPopup("Selected Location")
-                .openPopup();
-
-            // 4. Handle Map Interaction (Click to move marker/update inputs)
-            surfMap.on('click', (e) => {
-                updateInputs(e.latlng.lat, e.latlng.lng);
-                updateMapMarker(e.latlng.lat, e.latlng.lng);
-            });
-
-            // 5. Handle Marker Drag (Drag to move marker/update inputs)
-            mapMarker.on('dragend', (e) => {
-                const markerLatLng = mapMarker.getLatLng();
-                updateInputs(markerLatLng.lat, markerLatLng.lng);
-                updateMapMarker(markerLatLng.lat, markerLatLng.lng);
-            });
-            
-            // 6. Set initial inputs
-            updateInputs(lat, lon);
-            
-            // 7. Render Lucide icons
-            lucide.createIcons();
-        };
-
-        /**
-         * Copies the current coordinates to the clipboard and gives feedback.
-         */
-        const copyCoordinates = () => {
-            const button = document.getElementById('copyButton');
-            const buttonTextSpan = document.getElementById('buttonText');
-
-            const lat = document.getElementById('latitude').value;
-            const lon = document.getElementById('longitude').value;
-            const coordinates = `${lat}, ${lon}`;
-            
-            try {
-                // Use the older execCommand for better iFrame compatibility
-                const tempInput = document.createElement('textarea');
-                tempInput.value = coordinates;
-                document.body.appendChild(tempInput);
-                tempInput.select();
-                document.execCommand('copy');
-                document.body.removeChild(tempInput);
-                
-                // Visual feedback on button
-                button.classList.remove('bg-indigo-600', 'hover:bg-indigo-700');
-                button.classList.add('bg-green-500', 'hover:bg-green-600');
-                buttonTextSpan.textContent = 'Copied!';
-
-                setTimeout(() => {
-                    button.classList.remove('bg-green-500', 'hover:bg-green-600');
-                    button.classList.add('bg-indigo-600', 'hover:bg-indigo-700');
-                    buttonTextSpan.textContent = 'Copy';
-                }, 1500);
-
-            } catch (err) {
-                console.error('Could not copy text: ', err);
-                showMessage('Copy failed. Please copy manually.', 'error');
-            }
-        };
-
-        // Attach event listener to the copy button
-        document.getElementById('copyButton').addEventListener('click', copyCoordinates);
-
-        // Initialize Map on window load
-        window.onload = initMap;
-    </script>
-</body>
-</html>
+      marker.on('popupopen', () => {
+        const ctx = document.getElementById(id);
+        if (!ctx) return;
+        new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: d.time.slice(0, 24).map(t => t.slice(11, 16)),
+            datasets: [
+              { label: 'Wave (m)', data: d.wave_height.slice(0, 24), borderColor: '#4af', fill: false },
+              { label: 'Wind (km/h)', data: d.wind_speed.slice(0, 24), borderColor: '#fa4', fill: false }
+            ]
+          },
+          options: {
+            plugins: { legend: { labels: { color: '#fff' } } },
+            scales: { x: { ticks: { color: '#fff' } }, y: { ticks: { color: '#fff' } } },
+            elements: { point: { radius: 0 } },
+            maintainAspectRatio: false
+          }
+        });
+      });
+    } catch (err) {
+      console.error("Error loading", s.name, err);
+    }
+  }
+}
+showSpots();
+</script>
