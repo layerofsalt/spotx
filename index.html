@@ -1,69 +1,750 @@
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script>
-const map = L.map('map').setView([-28.164, 153.546], 9);
-L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-  maxZoom: 18,
-  attribution: 'Data © Open-Meteo • Spot X © 2025'
-}).addTo(map);
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spot X - Global Surf Forecast</title>
+    <!-- Load Tailwind CSS for modern, responsive styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Load Inter Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Leaflet Map CSS (No SRI/Integrity attributes needed) -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 
-const spots = [
-  { name: "Snapper Rocks", lat: -28.169, lon: 153.55 },
-  { name: "Burleigh Heads", lat: -28.083, lon: 153.46 },
-  { name: "Cabarita Beach", lat: -28.324, lon: 153.58 },
-  { name: "Lennox Head", lat: -28.796, lon: 153.593 },
-  { name: "Byron Bay", lat: -28.643, lon: 153.617 }
-];
+    <style>
+        /* Custom styles for the app container */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0d1117; /* Dark background inspired by GitHub dark theme */
+            color: #c9d1d9;
+        }
+        #map {
+            height: 400px; /* Set a specific height for the map container */
+            width: 100%;
+            border-radius: 0.75rem; /* rounded-xl */
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+        .data-card {
+            background-color: #161b22; /* Slightly lighter dark background for cards */
+            border: 1px solid #30363d;
+        }
+        .metric-value {
+            font-size: 1.1rem; /* Smaller for the table view */
+            font-weight: 600; /* font-semibold */
+        }
+        .metric-label {
+            text-transform: uppercase;
+            font-size: 0.75rem; /* text-xs */
+            color: #9ca3af; /* gray-400 */
+        }
+        /* Spinner for loading state */
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.1);
+            border-left-color: #ffffff;
+            border-radius: 50%;
+            width: 1.25rem;
+            height: 1.25rem;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        /* Style for the hourly forecast row */
+        .hourly-row > div {
+            padding: 0.5rem 0.25rem;
+            overflow: hidden;
+            white-space: nowrap;
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8">
 
-// ✅ WORKING endpoint
-async function getForecast(lat, lon) {
-  const url = `https://marine-api.open-meteo.com/v1/marine?latitude=${lat}&longitude=${lon}&hourly=wave_height,wave_direction,wave_period,wind_speed,wind_direction&timezone=auto`;
-  const res = await fetch(url);
-  const data = await res.json();
-  if (!data?.hourly) throw new Error("Invalid data");
-  return data.hourly;
-}
+    <div class="max-w-4xl mx-auto">
+        <header class="text-center mb-8">
+            <h1 class="text-4xl font-extrabold text-blue-400">Spot X Explorer</h1>
+            <p class="text-sm mt-2 text-gray-400">Global marine forecast. Click a blue marker or drag the red marker.</p>
+        </header>
 
-async function showSpots() {
-  for (const s of spots) {
-    try {
-      const d = await getForecast(s.lat, s.lon);
-      const id = `chart_${s.name.replace(/\s/g, "_")}`;
-      const popup = `
-        <strong>${s.name}</strong><br>
-        🌊 Swell: ${d.wave_height[0]?.toFixed(1)} m<br>
-        💨 Wind: ${d.wind_speed[0]?.toFixed(1)} km/h
-        <div><canvas id="${id}"></canvas></div>
-      `;
-      const marker = L.circleMarker([s.lat, s.lon], {
-        radius: 8, color: '#ff6600', fillColor: '#ffcc00', fillOpacity: 0.9
-      }).addTo(map);
-      marker.bindPopup(popup);
+        <!-- Map Container -->
+        <div id="map" class="mb-8"></div>
+        
+        <!-- Spot Selector Card -->
+        <div class="data-card p-4 rounded-xl mb-6">
+            <h2 class="text-xl font-bold mb-3 text-blue-300">Selected Known Global Spot</h2>
+            <select id="spot-selector" class="w-full p-2 rounded-lg bg-gray-700 border border-gray-600 text-white focus:ring-blue-500 focus:border-blue-500">
+                <!-- Options populated by JavaScript -->
+            </select>
+        </div>
 
-      marker.on('popupopen', () => {
-        const ctx = document.getElementById(id);
-        if (!ctx) return;
-        new Chart(ctx, {
-          type: 'line',
-          data: {
-            labels: d.time.slice(0, 24).map(t => t.slice(11, 16)),
-            datasets: [
-              { label: 'Wave (m)', data: d.wave_height.slice(0, 24), borderColor: '#4af', fill: false },
-              { label: 'Wind (km/h)', data: d.wind_speed.slice(0, 24), borderColor: '#fa4', fill: false }
-            ]
-          },
-          options: {
-            plugins: { legend: { labels: { color: '#fff' } } },
-            scales: { x: { ticks: { color: '#fff' } }, y: { ticks: { color: '#fff' } } },
-            elements: { point: { radius: 0 } },
-            maintainAspectRatio: false
-          }
-        });
-      });
-    } catch (err) {
-      console.error("Error loading", s.name, err);
-    }
-  }
-}
-showSpots();
-</script>
+        <!-- Coordinates Display Card and Geolocation Button -->
+        <div class="data-card p-4 rounded-xl mb-6">
+            <h2 class="text-xl font-bold mb-3 text-blue-300">Selected Coordinates</h2>
+            <div class="grid grid-cols-2 gap-4 mb-4">
+                <div>
+                    <p class="metric-label">Latitude</p>
+                    <p id="lat-output" class="metric-value text-white">-28.17</p>
+                </div>
+                <div>
+                    <p class="metric-label">Longitude</p>
+                    <p id="lng-output" class="metric-value text-white">153.55</p>
+                </div>
+            </div>
+            <button id="locate-button" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-lg transition duration-150 ease-in-out flex items-center justify-center space-x-2">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-6 11.25-6 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" />
+                </svg>
+                <span>Re-Center to My Location</span>
+            </button>
+        </div>
+        
+        <!-- Forecast Data Card -->
+        <div class="data-card p-4 rounded-xl">
+            <h2 class="text-xl font-bold mb-4 text-blue-300">3-Day Global Forecast</h2>
+            
+            <!-- Day Tabs -->
+            <div id="day-tabs" class="flex flex-wrap gap-2 mb-4 border-b border-gray-700 pb-2">
+                <!-- Tabs will be inserted here -->
+            </div>
+
+            <div id="forecast-data">
+                <!-- Forecast table for the selected day will be inserted here -->
+                <div class="text-center py-6 text-gray-500">Loading initial location...</div>
+            </div>
+
+            <button id="fetch-button" class="mt-4 w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition duration-150 ease-in-out">
+                Get Forecast
+            </button>
+        </div>
+
+        <!-- Message Box for Errors/Notifications -->
+        <div id="message-box" class="fixed bottom-4 right-4 bg-red-800 text-white p-3 rounded-lg shadow-2xl hidden transition-opacity duration-300 z-50"></div>
+
+    </div>
+
+    <!-- Leaflet Map JS (No SRI/Integrity attributes needed) -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <script>
+        // --- CONSTANTS ---
+        // Expanded list of global surf spots, now including Pembrokeshire, Wales
+        const SURF_SPOTS = [
+            // AUSTRALIA (AU) - Default Region
+            { name: "Snapper Rocks (QLD, Default)", lat: -28.169, lng: 153.555 },
+            { name: "Burleigh Heads (QLD)", lat: -28.094, lng: 153.454 },
+            { name: "Noosa Heads (QLD)", lat: -26.390, lng: 153.111 },
+            { name: "The Pass, Byron Bay (NSW)", lat: -28.608, lng: 153.616 },
+            { name: "Lennox Head (NSW)", lat: -28.790, lng: 153.606 },
+            { name: "Bondi Beach (NSW)", lat: -33.891, lng: 151.275 },
+            { name: "Narrabeen (NSW)", lat: -33.743, lng: 151.306 },
+            { name: "Newcastle (NSW)", lat: -32.924, lng: 151.777 },
+            { name: "Bells Beach (VIC)", lat: -38.375, lng: 144.331 },
+            { name: "Margaret River (WA)", lat: -33.990, lng: 114.997 },
+            { name: "Cactus (SA)", lat: -32.327, lng: 133.567 },
+            
+            // NORTH AMERICA (NA)
+            // ADJUSTMENT: Moved Mavericks marker slightly more offshore for better spot representation
+            { name: "Mavericks (CA, USA)", lat: 37.498, lng: -122.515 }, 
+            { name: "Trestles (CA, USA)", lat: 33.383, lng: -117.587 },
+            { name: "Rincon (CA, USA)", lat: 34.393, lng: -119.508 },
+            { name: "Santa Cruz (CA, USA)", lat: 36.958, lng: -122.016 },
+            { name: "Cocoa Beach (FL, USA)", lat: 28.324, lng: -80.607 },
+            { name: "Pipeline, Oahu (HI, USA)", lat: 21.666, lng: -158.055 },
+            { name: "Waimea Bay (HI, USA)", lat: 21.642, lng: -158.054 },
+            { name: "Honolua Bay, Maui (HI, USA)", lat: 21.018, lng: -156.639 },
+            { name: "Tofino (BC, Canada)", lat: 49.129, lng: -125.903 },
+            
+            // CENTRAL AMERICA & CARIBBEAN (CA)
+            { name: "Puerto Escondido (Mexico)", lat: 15.860, lng: -97.067 },
+            { name: "Salsa Brava (Costa Rica)", lat: 9.920, lng: -82.756 },
+            { name: "Pavones (Costa Rica)", lat: 8.388, lng: -83.125 },
+            { name: "Witch's Rock (Costa Rica)", lat: 10.749, lng: -85.679 },
+            { name: "El Sunzal (El Salvador)", lat: 13.593, lng: -89.431 },
+            { name: "Popoyo (Nicaragua)", lat: 11.455, lng: -86.130 },
+            
+            // SOUTH AMERICA (SA)
+            { name: "Chicama (Peru - Longest wave)", lat: -7.697, lng: -79.526 },
+            { name: "Florianópolis (Brazil)", lat: -27.600, lng: -48.490 },
+            { name: "Pichilemu / Punta de Lobos (Chile)", lat: -34.409, lng: -72.000 },
+            { name: "Montañita (Ecuador)", lat: -1.829, lng: -80.751 },
+            { name: "Mar del Plata (Argentina)", lat: -38.005, lng: -57.535 },
+
+            // EUROPE (EU)
+            { name: "Nazaré (Portugal - Big Wave)", lat: 39.601, lng: -9.079 },
+            { name: "Peniche / Supertubos (Portugal)", lat: 39.375, lng: -9.368 },
+            { name: "Hossegor (France)", lat: 43.668, lng: -1.439 },
+            { name: "Mundaka (Spain)", lat: 43.407, lng: -2.695 },
+            { name: "Freshwater West (Wales, UK)", lat: 51.691, lng: -5.088 },
+            { name: "Broadhaven South (Wales, UK)", lat: 51.583, lng: -5.045 },
+            { name: "Manorbier (Wales, UK)", lat: 51.644, lng: -4.846 },
+            { name: "Newquay (Cornwall, UK)", lat: 50.417, lng: -5.093 },
+            { name: "Bundoran (Ireland)", lat: 54.475, lng: -8.270 },
+            
+            // AFRICA & MIDDLE EAST (AF)
+            { name: "Jeffreys Bay (South Africa)", lat: -34.072, lng: 24.939 },
+            { name: "Elands Bay (South Africa)", lat: -32.259, lng: 18.337 },
+            { name: "Anchor Point (Morocco)", lat: 30.490, lng: -9.775 },
+            { name: "El Quemao (Canary Islands, Spain)", lat: 29.155, lng: -13.520 },
+            { name: "Tofinho Point (Mozambique)", lat: -23.868, lng: 35.539 },
+
+            // ASIA & PACIFIC (AP)
+            { name: "Uluwatu, Bali (Indonesia)", lat: -8.816, lng: 116.314 },
+            { name: "Desert Point, Lombok (Indonesia)", lat: -8.729, lng: 115.939 },
+            { name: "G-Land, Java (Indonesia)", lat: -8.800, lng: 114.249 },
+            { name: "Cloud 9, Siargao (Philippines)", lat: 9.800, lng: 126.075 },
+            { name: "Cloudbreak (Fiji)", lat: -17.818, lng: 177.161 },
+            { name: "Teahupo'o (Tahiti, French Polynesia)", lat: -17.838, lng: -149.267 },
+            { name: "Shidashita (Japan)", lat: 35.340, lng: 140.380 },
+        ];
+
+        // Apply a strong offshore nudge to the default coordinates for reliable marine data
+        const NUDGE_AMOUNT = 0.02; 
+
+        function applyInitialNudge(spot) {
+             // Nudging approximately 2.2 km south and 2.2km east (suitable for East Coast Australia/US)
+            const nudgedLat = spot.lat - NUDGE_AMOUNT; 
+            const nudgedLng = spot.lng + NUDGE_AMOUNT;
+
+            return { 
+                name: spot.name, 
+                lat: nudgedLat, 
+                lng: nudgedLng 
+            };
+        }
+
+        const INITIAL_DEFAULT_SPOT = SURF_SPOTS[0];
+        const DEFAULT_SPOT = applyInitialNudge(INITIAL_DEFAULT_SPOT);
+        
+        const DEFAULT_ZOOM = 14; 
+        
+        // Requesting 3 days of forecast data
+        const FORECAST_DAYS = 3; 
+        
+        // API Endpoints
+        const MARINE_API_BASE_URL = "https://marine-api.open-meteo.com/v1/marine";
+        const WEATHER_API_BASE_URL = "https://api.open-meteo.com/v1/forecast"; // Used for wind fallback
+
+        // Output elements
+        const latOutput = document.getElementById('lat-output');
+        const lngOutput = document.getElementById('lng-output');
+        const forecastContainer = document.getElementById('forecast-data');
+        const dayTabs = document.getElementById('day-tabs');
+        const fetchButton = document.getElementById('fetch-button');
+        const messageBox = document.getElementById('message-box');
+        const spotSelector = document.getElementById('spot-selector');
+        const locateButton = document.getElementById('locate-button'); 
+
+        let currentLat = DEFAULT_SPOT.lat;
+        let currentLng = DEFAULT_SPOT.lng;
+        let map, marker; // Map and marker instances
+        let forecastData = []; // Storage for the full 3-day forecast
+        let currentDayIndex = 0;
+        let spotMarkers = []; // Will store all the fixed spot markers
+
+        // --- UTILITY FUNCTIONS ---
+        
+        /** Converts meters per second (m/s) to knots */
+        function msToKnots(ms) {
+            return (ms * 1.94384).toFixed(0);
+        }
+        
+        /** Converts meters to feet */
+        function mToFeet(m) {
+            return m * 3.28084;
+        }
+
+        /** Converts wave direction degrees (0-360) to a cardinal direction */
+        function degreesToCardinal(deg) {
+            if (deg == null) return 'N/A';
+            const directions = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+            const index = Math.round(deg / (360 / directions.length)) % directions.length;
+            return directions[index];
+        }
+
+        /** Returns the rotation degree for a given cardinal direction (0=North). */
+        function getRotationForCardinal(deg) {
+             // FIX: The API returns the direction the wind is COMING FROM.
+             // We must add 180 degrees to show the direction the wind is GOING TO (vector/arrow direction).
+             return (deg + 180) % 360; 
+        }
+
+        /** Creates the SVG arrow for wind direction. */
+        function getWindArrowSvg(directionDeg) {
+            if (directionDeg == null) return '';
+            const rotation = getRotationForCardinal(directionDeg);
+
+            return `
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4 text-blue-400 inline-block transition-transform duration-300" style="transform: rotate(${rotation}deg);">
+                    <path fill-rule="evenodd" d="M11.47 2.47a.75.75 0 0 1 1.06 0l7.5 7.5a.75.75 0 1 1-1.06 1.06l-6.22-6.22V21a.75.75 0 0 1-1.5 0V4.81L4.03 11.03a.75.75 0 0 1-1.06-1.06l7.5-7.5Z" clip-rule="evenodd" />
+                </svg>
+            `;
+        }
+        
+        /** Applies a coordinate offset (nudge) to move the point slightly offshore */
+        function nudgeOffshore(lat, lng) {
+            // Nudging approximately 2.2 km south and 2.2km east
+            const nudgedLat = lat - NUDGE_AMOUNT; 
+            const nudgedLng = lng + NUDGE_AMOUNT;
+
+            return { lat: nudgedLat, lng: nudgedLng };
+        }
+
+
+        /** Shows a temporary message box for errors or notifications */
+        function showMessage(message, isError = true) {
+            messageBox.textContent = message;
+            messageBox.className = isError 
+                ? 'fixed bottom-4 right-4 bg-red-800 text-white p-3 rounded-lg shadow-2xl transition-opacity duration-300 z-50'
+                : 'fixed bottom-4 right-4 bg-green-600 text-white p-3 rounded-lg shadow-2xl transition-opacity duration-300 z-50';
+            messageBox.style.display = 'block';
+
+            setTimeout(() => {
+                messageBox.style.display = 'none';
+            }, 3000);
+        }
+
+        /**
+         * Processes the hourly time-series data from Open-Meteo and groups it by day.
+         * The isMarine flag determines if wave data is expected.
+         */
+        function processOpenMeteoData(data, isMarine = true) {
+            if (!data.hourly || data.hourly.time.length === 0) {
+                return [];
+            }
+
+            const groupedData = {};
+
+            for (let i = 0; i < data.hourly.time.length; i++) {
+                const apiTime = new Date(data.hourly.time[i]);
+                const dateKey = apiTime.toISOString().split('T')[0];
+
+                if (!groupedData[dateKey]) {
+                    groupedData[dateKey] = [];
+                }
+
+                // Create a basic entry if it doesn't exist
+                let existingEntry = groupedData[dateKey].find(item => item.fullTime === data.hourly.time[i]);
+                if (!existingEntry) {
+                    existingEntry = {
+                        time: apiTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                        fullTime: data.hourly.time[i],
+                        waveHeight: 'N/A ft',
+                        period: 'N/A s',
+                        swellDirection: 'N/A',
+                        windSpeed: 'N/A knots',
+                        windDirection: 'N/A',
+                        windDirectionDeg: null // Store degrees for rotation
+                    };
+                    groupedData[dateKey].push(existingEntry);
+                }
+                
+                // --- Extract Marine Metrics (Wave Data) ---
+                if (isMarine) {
+                    const waveHeightM = data.hourly.wave_height?.[i];
+                    const wavePeriodS = data.hourly.wave_period?.[i];
+                    const waveDirectionDeg = data.hourly.wave_direction?.[i];
+
+                    if (waveHeightM != null) {
+                         existingEntry.waveHeight = `${mToFeet(waveHeightM).toFixed(1)} ft`;
+                    }
+                    if (wavePeriodS != null) {
+                        existingEntry.period = `${wavePeriodS.toFixed(1)} s`;
+                    }
+                    if (waveDirectionDeg != null) {
+                        existingEntry.swellDirection = degreesToCardinal(waveDirectionDeg);
+                    }
+                }
+
+                // --- Extract Wind Metrics ---
+                const windSpeedMs = data.hourly.wind_speed_10m?.[i];
+                const windDirectionDeg = data.hourly.wind_direction_10m?.[i];
+
+                if (windSpeedMs != null) {
+                     existingEntry.windSpeed = `${msToKnots(windSpeedMs)} knots`;
+                }
+                if (windDirectionDeg != null) {
+                     existingEntry.windDirection = degreesToCardinal(windDirectionDeg);
+                     existingEntry.windDirectionDeg = windDirectionDeg; // Store for arrow rotation
+                }
+            }
+
+            const dailyForecast = Object.keys(groupedData).map((dateKey, index) => {
+                const date = new Date(dateKey);
+                let dayLabel = '';
+
+                if (index === 0) dayLabel = 'Today';
+                else if (index === 1) dayLabel = 'Tomorrow';
+                else dayLabel = date.toLocaleDateString([], { weekday: 'short' });
+
+                return {
+                    day: `${dayLabel} (${date.toLocaleDateString([], { month: 'short', day: 'numeric' })})`,
+                    hourlyData: groupedData[dateKey].sort((a, b) => new Date(a.fullTime) - new Date(b.fullTime))
+                };
+            });
+
+            return dailyForecast;
+        }
+
+
+        /** Renders the tabs and the forecast table for the currently selected day. */
+        function renderForecast() {
+            if (forecastData.length === 0 || !forecastData[0].hourlyData || forecastData[0].hourlyData.length === 0) {
+                 forecastContainer.innerHTML = `
+                     <div class="p-3 bg-red-900/50 rounded-lg text-red-300">
+                        <p class="font-semibold">No Marine Data Available</p>
+                        <p class="text-sm mt-1">The coordinates selected (Lat: ${currentLat}, Lng: ${currentLng}) appear to be over land or without reliable marine data. <strong class="text-yellow-400">Please drag the map marker slightly into the open ocean.</strong></p>
+                    </div>`;
+                 dayTabs.innerHTML = '';
+                 return;
+            }
+
+            // --- 1. Render Tabs ---
+            dayTabs.innerHTML = forecastData.map((dayObj, index) => {
+                const isActive = index === currentDayIndex;
+                return `
+                    <button data-day-index="${index}" 
+                            class="py-2 px-4 rounded-lg font-semibold text-sm transition-colors duration-150 day-tab ${isActive ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}">
+                        ${dayObj.day}
+                    </button>
+                `;
+            }).join('');
+
+            // Re-attach tab click listeners
+            document.querySelectorAll('.day-tab').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    currentDayIndex = parseInt(e.target.dataset.dayIndex);
+                    renderForecast();
+                });
+            });
+
+            // --- 2. Render Hourly Table for Selected Day ---
+            const selectedDay = forecastData[currentDayIndex];
+            if (!selectedDay) {
+                forecastContainer.innerHTML = '<div class="text-center py-6 text-red-400">Error: Forecast data missing for this day.</div>';
+                return;
+            }
+
+            const hourlyRows = selectedDay.hourlyData.map(hour => {
+                const windIsPresent = hour.windSpeed !== 'N/A knots'; 
+                const windColorClass = windIsPresent ? 'text-lime-400' : 'text-red-500';
+                const waveIsPresent = hour.waveHeight !== 'N/A ft'; 
+                const waveColorClass = waveIsPresent ? 'text-white' : 'text-red-500';
+
+                return `
+                    <div class="hourly-row grid grid-cols-5 text-center border-t border-gray-700 hover:bg-gray-800 transition-colors">
+                        <div class="text-blue-300 font-bold">${hour.time}</div>
+                        <div class="${waveColorClass}">${hour.waveHeight}</div>
+                        <div class="${waveColorClass}">${hour.period}</div>
+                        <div class="${waveColorClass}">${hour.swellDirection}</div>
+                        
+                        <!-- Wind Display with Arrow -->
+                        <div class="flex flex-col justify-center items-center">
+                            <span class="font-bold text-sm ${windColorClass}">${hour.windSpeed}</span>
+                            <span class="text-xs ${windColorClass} font-medium flex items-center justify-center space-x-1">
+                                ${getWindArrowSvg(hour.windDirectionDeg)}
+                                <span>${hour.windDirection}</span>
+                            </span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            forecastContainer.innerHTML = `
+                <div class="overflow-x-auto">
+                    <div class="min-w-full">
+                        <!-- Table Header -->
+                        <div class="grid grid-cols-5 text-center text-xs uppercase font-semibold text-gray-400 pb-2 border-b-2 border-blue-600">
+                            <div>Time</div>
+                            <div>Wave (ft)</div>
+                            <div>Period (s)</div>
+                            <div>Swell Dir</div>
+                            <div>Wind (kt/Dir)</div>
+                        </div>
+                        
+                        <!-- Hourly Data Rows -->
+                        ${hourlyRows}
+                    </div>
+                </div>
+            `;
+        }
+        
+        /**
+         * Updates the internal coordinates, map position, and display, then fetches all forecasts.
+         */
+        function updateLocationAndFetch(lat, lng, centerMap = false, zoomLevel = DEFAULT_ZOOM) {
+            currentLat = parseFloat(lat).toFixed(3);
+            currentLng = parseFloat(lng).toFixed(3);
+
+            latOutput.textContent = currentLat;
+            lngOutput.textContent = currentLng;
+            marker.setLatLng([currentLat, currentLng]);
+
+            if (centerMap) {
+                map.setView([currentLat, currentLng], zoomLevel);
+            }
+            
+            // Auto-fetch the main marine forecast
+            fetchForecast();
+        }
+        
+        /** Fallback: Fetches wind data from the standard Open-Meteo Weather API if Marine wind is null */
+        async function fetchWindFallback() {
+            try {
+                // Fetch only wind data from the general weather API
+                const windApiUrl = `${WEATHER_API_BASE_URL}?latitude=${currentLat}&longitude=${currentLng}&hourly=wind_speed_10m,wind_direction_10m&timezone=auto&forecast_days=${FORECAST_DAYS}`;
+                
+                const response = await fetch(windApiUrl);
+                if (!response.ok) throw new Error(`Fallback API returned status: ${response.status}`);
+
+                const data = await response.json();
+                
+                // Process the wind data (isMarine=false)
+                const windFallbackData = processOpenMeteoData(data, false);
+                
+                // Merge wind data into the existing marine forecastData structure
+                let windMerged = false;
+                for (let i = 0; i < forecastData.length; i++) {
+                    const marineDay = forecastData[i].hourlyData;
+                    const windDay = windFallbackData[i]?.hourlyData;
+
+                    if (windDay) {
+                        for (let j = 0; j < marineDay.length; j++) {
+                            const marineHour = marineDay[j];
+                            const windHour = windDay.find(h => h.fullTime === marineHour.fullTime);
+                            
+                            if (windHour && windHour.windSpeed !== 'N/A knots') {
+                                marineHour.windSpeed = windHour.windSpeed;
+                                marineHour.windDirection = windHour.windDirection;
+                                marineHour.windDirectionDeg = windHour.windDirectionDeg;
+                                windMerged = true;
+                            }
+                        }
+                    }
+                }
+                
+                if (windMerged) {
+                    console.log("Wind data successfully loaded via fallback Weather API.");
+                } else {
+                    console.warn("Fallback returned, but no wind data was available to merge.");
+                }
+
+            } catch (error) {
+                console.error("Error fetching wind fallback data:", error);
+                showMessage("Warning: Could not fetch fallback wind data.", true);
+            }
+        }
+
+
+        /** Async function to fetch and display forecast data from Open-Meteo */
+        async function fetchForecast() {
+            // Disable button and show loading state
+            fetchButton.disabled = true;
+            fetchButton.textContent = 'Fetching Global Data...';
+            forecastContainer.innerHTML = '<div class="text-center py-6 text-blue-400 animate-pulse">Loading 3-day marine data...</div>';
+            dayTabs.innerHTML = ''; // Clear tabs during loading
+
+            try {
+                // --- 1. Fetch Marine API (Primary Data Source) ---
+                const marineApiUrl = `${MARINE_API_BASE_URL}?latitude=${currentLat}&longitude=${currentLng}&hourly=wave_height,wave_period,wave_direction,wind_speed_10m,wind_direction_10m&timezone=auto&forecast_days=${FORECAST_DAYS}`;
+                
+                const response = await fetch(marineApiUrl);
+                if (!response.ok) throw new Error(`Marine API returned status: ${response.status}`);
+
+                const data = await response.json();
+                
+                const hasSwellData = data.hourly.wave_height && data.hourly.wave_height.some(val => val !== null);
+                
+                if (!hasSwellData) {
+                    throw new Error("No marine swell data available at these coordinates. Are you sure you are over water?");
+                }
+
+                // Process initial marine data (includes wind from marine API, which may be null)
+                forecastData = processOpenMeteoData(data, true);
+                
+                // Check if ALL wind data points from the Marine API are null
+                const windIsMissing = data.hourly.wind_speed_10m.every(val => val === null);
+
+                if (windIsMissing) {
+                    // --- 2. Fetch Wind Fallback if missing ---
+                    await fetchWindFallback();
+                } else {
+                    showMessage(`3-Day forecast loaded for Lat: ${currentLat}, Lng: ${currentLng}`, false);
+                }
+
+            } catch (error) {
+                console.error("Error fetching marine forecast:", error);
+                forecastData = [];
+                showMessage(`Forecast Error: ${error.message}`, true);
+
+            } finally {
+                currentDayIndex = 0;
+                renderForecast(); 
+                fetchButton.disabled = false;
+                fetchButton.textContent = 'Get Forecast';
+            }
+        }
+
+
+        /** Handles setting the map and state to the user's current location (nudged offshore) */
+        function loadUserLocation(lat, lng) {
+            const nudgedCoords = nudgeOffshore(lat, lng);
+            updateLocationAndFetch(nudgedCoords.lat, nudgedCoords.lng, true, 14);
+            // Restore button state
+            locateButton.disabled = false;
+            locateButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-6 11.25-6 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" />
+                </svg><span>Re-Center to My Location</span>`;
+            showMessage(`Found location and auto-loaded forecast!`, false);
+        }
+
+        /** Handles falling back to the default spot */
+        function loadDefaultLocation() {
+            // Use the already nudged DEFAULT_SPOT coordinates
+            currentLat = DEFAULT_SPOT.lat;
+            currentLng = DEFAULT_SPOT.lng;
+            updateLocationAndFetch(DEFAULT_SPOT.lat, DEFAULT_SPOT.lng, true, DEFAULT_ZOOM);
+            // Restore button state
+            locateButton.disabled = false;
+             locateButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-6 11.25-6 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" />
+                </svg><span>Re-Center to My Location</span>`;
+            showMessage(`Location access denied or unavailable. Loading default spot: ${INITIAL_DEFAULT_SPOT.name}`, true);
+        }
+        
+        /** Attempts to get user location on initial page load. */
+        function checkInitialLocation() {
+            if (!navigator.geolocation) {
+                showMessage("Geolocation is not supported by your browser. Loading default spot.", true);
+                loadDefaultLocation();
+                return;
+            }
+            
+            // Show initial loading message in the forecast area
+            forecastContainer.innerHTML = '<div class="text-center py-6 text-blue-400 animate-pulse"><div class="spinner mx-auto mb-2"></div>Attempting to find your location...</div>';
+
+            const success = (position) => {
+                loadUserLocation(position.coords.latitude, position.coords.longitude);
+            };
+
+            const error = (err) => {
+                let errorMsg = "Location access denied. Loading default spot.";
+                if (err.code === 1) errorMsg = "Location access blocked. Loading default spot.";
+                showMessage(errorMsg, true);
+                loadDefaultLocation(); // Fallback on error
+            };
+
+            const options = {
+                enableHighAccuracy: true,
+                timeout: 5000,
+                maximumAge: 0
+            };
+            
+            // Set button state to reflect loading
+            locateButton.disabled = true;
+            locateButton.innerHTML = '<span class="spinner mr-2"></span> Finding You...';
+
+            navigator.geolocation.getCurrentPosition(success, error, options);
+        }
+
+        /** Uses the browser's Geolocation API to find and center the map on the user (for manual button click). */
+        function centerToUserLocation() {
+            // Simply re-use the initial check logic
+            checkInitialLocation();
+        }
+
+        /** Handles clicking one of the static spot markers on the map */
+        function handleSpotMarkerClick(spot, index) {
+            // 1. Nudge the selected spot offshore for marine data
+            const nudgedSpot = nudgeOffshore(spot.lat, spot.lng);
+            
+            // 2. Adjust zoom level for international spots
+            let zoomLevel = (index >= 10) ? 8 : DEFAULT_ZOOM;
+
+            // 3. Update the main draggable marker position (offshore) and fetch the forecast
+            updateLocationAndFetch(nudgedSpot.lat, nudgedSpot.lng, true, zoomLevel);
+            
+            // 4. Update the <select> element to match the clicked spot
+            spotSelector.value = index;
+
+            showMessage(`Map centered on ${spot.name} (nudged offshore)`, false);
+        }
+
+
+        // --- MAP INITIALIZATION ---
+
+        function setupMap() {
+             // Initialize the map centered at the default spot temporarily
+            map = L.map('map').setView([DEFAULT_SPOT.lat, DEFAULT_SPOT.lng], DEFAULT_ZOOM);
+
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+            }).addTo(map);
+
+            // Add the main draggable marker (default Leaflet icon)
+            marker = L.marker([DEFAULT_SPOT.lat, DEFAULT_SPOT.lng], {
+                draggable: true
+            }).addTo(map);
+            
+            // Populate the spot selector
+            spotSelector.innerHTML = SURF_SPOTS.map((spot, index) => 
+                `<option value="${index}" ${index === 0 ? 'selected' : ''}>${spot.name}</option>`
+            ).join('');
+
+            // --- Add static markers for all known spots ---
+            SURF_SPOTS.forEach((spot, index) => {
+                // 1. Create a non-nudged Circle Marker for visual placement
+                const circleMarker = L.circleMarker([spot.lat, spot.lng], {
+                    radius: 4,
+                    color: '#3b82f6', // blue-500
+                    fillColor: '#3b82f6',
+                    fillOpacity: 0.8
+                }).addTo(map);
+
+                // 2. Add a popup
+                circleMarker.bindPopup(`<b>${spot.name}</b><br>Click to set as target`);
+                
+                // 3. Add click handler to select the spot and fetch the forecast
+                circleMarker.on('click', () => {
+                    handleSpotMarkerClick(spot, index);
+                });
+
+                spotMarkers.push(circleMarker);
+            });
+
+            // --- EVENT HANDLERS ---
+            
+            marker.on('dragend', function (e) {
+                const latlng = marker.getLatLng();
+                updateLocationAndFetch(latlng.lat, latlng.lng, false);
+            });
+
+            map.on('click', function (e) {
+                updateLocationAndFetch(e.latlng.lat, e.latlng.lng, false);
+            });
+
+            spotSelector.addEventListener('change', function() {
+                const selectedIndex = parseInt(this.value);
+                const spot = SURF_SPOTS[selectedIndex];
+                
+                // Use the new helper function to set location
+                handleSpotMarkerClick(spot, selectedIndex);
+            });
+
+            // Attach event listeners
+            fetchButton.addEventListener('click', fetchForecast);
+            locateButton.addEventListener('click', centerToUserLocation);
+        }
+        
+        // Ensure map is set up and then trigger the initial location check
+        window.onload = function() {
+            setupMap();
+            checkInitialLocation();
+        }
+
+    </script>
+</body>
+</html>
