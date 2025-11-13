@@ -27,30 +27,29 @@
   <div class="max-w-4xl mx-auto">
     <header class="text-center mb-8">
       <h1 class="text-4xl font-extrabold text-blue-400">Spot X Explorer</h1>
-      <p class="text-sm mt-2 text-gray-400">Global marine forecast. Auto-detects your location or choose any global spot.</p>
+      <p class="text-sm mt-2 text-gray-400">Global marine forecast — localized to your timezone.</p>
     </header>
 
     <div id="map" class="mb-8"></div>
 
     <div class="data-card p-4 rounded-xl mb-6">
       <h2 class="text-xl font-bold mb-3 text-blue-300">Select Surf Spot</h2>
-      <select id="spot-selector" class="w-full p-2 rounded-lg bg-gray-700 border border-gray-600 text-white">
-      </select>
+      <select id="spot-selector" class="w-full p-2 rounded-lg bg-gray-700 border border-gray-600 text-white"></select>
     </div>
 
     <div class="data-card p-4 rounded-xl mb-6">
-      <h2 class="text-xl font-bold mb-3 text-blue-300">Selected Coordinates</h2>
+      <h2 class="text-xl font-bold mb-3 text-blue-300">Coordinates</h2>
       <div class="grid grid-cols-2 gap-4 mb-4">
         <div><p class="metric-label">Latitude</p><p id="lat-output" class="metric-value text-white">-28.17</p></div>
         <div><p class="metric-label">Longitude</p><p id="lng-output" class="metric-value text-white">153.55</p></div>
       </div>
       <button id="locate-button" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2 px-4 rounded-lg flex items-center justify-center space-x-2">
-        <span>📍 Re-Center to My Location</span>
+        <span>📍 Use My Location</span>
       </button>
     </div>
 
     <div class="data-card p-4 rounded-xl">
-      <h2 class="text-xl font-bold mb-4 text-blue-300">3-Day Forecast</h2>
+      <h2 class="text-xl font-bold mb-4 text-blue-300">3-Day Surf Forecast</h2>
       <div id="day-tabs" class="flex gap-2 mb-4 border-b border-gray-700 pb-2"></div>
       <div id="forecast-data"><div class="text-center py-6 text-gray-500">Loading...</div></div>
       <button id="fetch-button" class="mt-4 w-full bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg">Refresh Forecast</button>
@@ -83,7 +82,8 @@
   }).addTo(map);
 
   let marker=L.marker([-28.169,153.555],{draggable:true}).addTo(map);
-  const latOut=document.getElementById('lat-output'),lngOut=document.getElementById('lng-output');
+  const latOut=document.getElementById('lat-output');
+  const lngOut=document.getElementById('lng-output');
   const forecastEl=document.getElementById('forecast-data');
   const dayTabs=document.getElementById('day-tabs');
   const msgBox=document.getElementById('message-box');
@@ -102,7 +102,7 @@
     setTimeout(()=>msgBox.style.display='none',3000);
   }
 
-  // 🌊 Simulate tide phase based on local time
+  // Simulated tide phase
   function getSimulatedTidePhase(timeStr){
     const d=new Date(timeStr);
     const hrs=d.getHours()+d.getMinutes()/60;
@@ -138,9 +138,9 @@
         wave:mToFeet(data.wave_height[i]).toFixed(1),
         period:data.wave_period[i],
         dir:degreesToCardinal(data.wave_direction[i]),
+        tide:getSimulatedTidePhase(t),
         wind:msToKnots(data.wind_speed_10m[i]),
-        winddir:degreesToCardinal(data.wind_direction_10m[i]),
-        tide:getSimulatedTidePhase(t)
+        winddir:degreesToCardinal(data.wind_direction_10m[i])
       });
     });
 
@@ -173,7 +173,8 @@
   }
 
   async function updateForecast(lat,lng){
-    latOut.textContent=lat.toFixed(3);lngOut.textContent=lng.toFixed(3);
+    latOut.textContent=lat.toFixed(3);
+    lngOut.textContent=lng.toFixed(3);
     const data=await getForecast(lat,lng);
     renderForecast(data);
     showMessage('Forecast updated',true);
